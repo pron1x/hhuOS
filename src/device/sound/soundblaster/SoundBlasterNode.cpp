@@ -15,4 +15,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 
-#include "KeyboardRunnable.h"
+#include "SoundBlasterNode.h"
+
+namespace Device::Sound {
+
+SoundBlasterNode::SoundBlasterNode(SoundBlaster *soundBlaster) : MemoryNode("soundblaster"), soundBlaster(soundBlaster) {}
+
+Util::File::Type SoundBlasterNode::getFileType() {
+    return Util::File::CHARACTER;
+}
+
+SoundBlasterNode::~SoundBlasterNode() {
+    delete soundBlaster;
+}
+
+uint64_t SoundBlasterNode::writeData(const uint8_t *sourceBuffer, uint64_t pos, uint64_t numBytes) {
+    soundBlaster->playPcmData(sourceBuffer, numBytes);
+    return numBytes;
+}
+
+}

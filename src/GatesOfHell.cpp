@@ -27,6 +27,7 @@
 #include "device/hid/Keyboard.h"
 #include "lib/util/stream/InputStreamReader.h"
 #include "lib/util/file/tar/Archive.h"
+#include "lib/util/file/wav/File.h"
 #include "filesystem/tar/ArchiveDriver.h"
 #include "lib/util/file/File.h"
 #include "lib/util/stream/BufferedReader.h"
@@ -58,6 +59,7 @@
 #include "filesystem/process/ProcessDriver.h"
 #include "device/hid/Mouse.h"
 #include "device/hid/Ps2Controller.h"
+#include "device/sound/soundblaster/SoundBlaster.h"
 
 Kernel::Logger GatesOfHell::log = Kernel::Logger::get("GatesOfHell");
 
@@ -105,6 +107,8 @@ void GatesOfHell::enter() {
 
     Kernel::Logger::addOutputStream(*new Util::Stream::FileOutputStream("/device/log"));
     enablePortLogging();
+
+    Device::Sound::SoundBlaster::initialize();
 
     printBanner();
 

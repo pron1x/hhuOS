@@ -37,6 +37,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/hhuOS.initrd"
         COMMAND /bin/cp "$<TARGET_FILE:membench>" "${HHUOS_ROOT_DIR}/initrd/bin/membench"
         COMMAND /bin/cp "$<TARGET_FILE:mkdir>" "${HHUOS_ROOT_DIR}/initrd/bin/mkdir"
         COMMAND /bin/cp "$<TARGET_FILE:mouse>" "${HHUOS_ROOT_DIR}/initrd/bin/mouse"
+        COMMAND /bin/cp "$<TARGET_FILE:play>" "${HHUOS_ROOT_DIR}/initrd/bin/play"
         COMMAND /bin/cp "$<TARGET_FILE:polygon>" "${HHUOS_ROOT_DIR}/initrd/bin/polygon"
         COMMAND /bin/cp "$<TARGET_FILE:ps>" "${HHUOS_ROOT_DIR}/initrd/bin/ps"
         COMMAND /bin/cp "$<TARGET_FILE:pwd>" "${HHUOS_ROOT_DIR}/initrd/bin/pwd"
@@ -51,4 +52,4 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/hhuOS.initrd"
         COMMAND /bin/rm -f "${HHUOS_ROOT_DIR}/hhuOS.img" "${HHUOS_ROOT_DIR}/hhuOS.iso"
         DEPENDS shell ant beep cat color cp cube date echo fault hello ls lvgl_demo membench mkdir mouse polygon ps pwd rm rmdir shutdown touch tree uptime)
 
-add_custom_target(${PROJECT_NAME} DEPENDS shell ant beep cat color cp cube date echo fault hello ls lvgl_demo membench mkdir mouse polygon ps pwd rm rmdir shutdown touch tree uptime music "${CMAKE_BINARY_DIR}/hhuOS.initrd")
+add_custom_target(${PROJECT_NAME} DEPENDS shell ant beep cat color cp cube date echo fault hello ls lvgl_demo membench mkdir mouse play polygon ps pwd rm rmdir shutdown touch tree uptime music "${CMAKE_BINARY_DIR}/hhuOS.initrd")

@@ -18,4 +18,7 @@ cmake_minimum_required(VERSION 3.14)
 
 target_sources(device PUBLIC
         ${HHUOS_SRC_DIR}/device/sound/speaker/PcSpeaker.cpp
-        ${HHUOS_SRC_DIR}/device/sound/speaker/PcSpeakerNode.cpp)
+        ${HHUOS_SRC_DIR}/device/sound/speaker/PcSpeakerNode.cpp
+        ${HHUOS_SRC_DIR}/device/sound/soundblaster/SoundBlaster.cpp
+        ${HHUOS_SRC_DIR}/device/sound/soundblaster/SoundBlaster1.cpp
+        ${HHUOS_SRC_DIR}/device/sound/soundblaster/SoundBlasterNode.cpp)

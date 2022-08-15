@@ -15,32 +15,52 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 
-#ifndef HHUOS_KEYBOARDRUNNABLE_H
-#define HHUOS_KEYBOARDRUNNABLE_H
+#ifndef HHUOS_SOUNDBLASTERNODE_H
+#define HHUOS_SOUNDBLASTERNODE_H
 
-// TODO: This should be a user-space threads, started by the terminal.
-class KeyboardRunnable {
+#include "filesystem/memory/MemoryNode.h"
+#include "SoundBlaster.h"
+
+namespace Device::Sound {
+
+class SoundBlasterNode : public Filesystem::Memory::MemoryNode {
 
 public:
     /**
      * Default Constructor.
      */
-    KeyboardRunnable() = default;
+    explicit SoundBlasterNode(SoundBlaster *soundBlaster);
 
     /**
      * Copy Constructor.
      */
-    KeyboardRunnable(const KeyboardRunnable &other) = delete;
+    SoundBlasterNode(const SoundBlasterNode &other) = delete;
 
     /**
      * Assignment operator.
      */
-    KeyboardRunnable &operator=(const KeyboardRunnable &other) = delete;
+    SoundBlasterNode &operator=(const SoundBlasterNode &other) = delete;
 
     /**
      * Destructor.
      */
-    ~KeyboardRunnable() = default;
+    ~SoundBlasterNode() override;
+
+    /**
+     * Overriding function from MemoryNode.
+     */
+    Util::File::Type getFileType() override;
+
+    /**
+     * Overriding function from MemoryNode.
+     */
+    uint64_t writeData(const uint8_t *sourceBuffer, uint64_t pos, uint64_t numBytes) override;
+
+private:
+
+    SoundBlaster *soundBlaster;
 };
+
+}
 
 #endif

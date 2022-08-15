@@ -41,7 +41,7 @@ bool FloppyController::isAvailable() {
 }
 
 FloppyController::FloppyController() :
-        dmaMemory(Kernel::System::getService<Kernel::MemoryService>().allocateLowerMemory(SECTOR_SIZE * 72)),
+        dmaMemory(Kernel::System::getService<Kernel::MemoryService>().allocateLowerMemory(SECTOR_SIZE * 72, Util::Memory::PAGESIZE)),
         statusRegisterA(IO_BASE_ADDRESS + 0), statusRegisterB(IO_BASE_ADDRESS + 1), digitalOutputRegister(IO_BASE_ADDRESS + 2),
         tapeDriveRegister(IO_BASE_ADDRESS + 3), mainStatusRegister(IO_BASE_ADDRESS + 4), dataRateSelectRegister(IO_BASE_ADDRESS + 4),
         fifoRegister(IO_BASE_ADDRESS + 5), digitalInputRegister(IO_BASE_ADDRESS + 7), configControlRegister(IO_BASE_ADDRESS + 7) {}
@@ -338,9 +338,7 @@ void FloppyController::trigger(const Kernel::InterruptFrame &frame) {
 }
 
 void FloppyController::prepareDma(FloppyDevice &device, Isa::TransferMode transferMode, uint8_t sectorCount) {
-    auto physicalAddress = reinterpret_cast<uint32_t>(Kernel::System::getService<Kernel::MemoryService>().getPhysicalAddress(dmaMemory))
-            + (reinterpret_cast<uint32_t>(dmaMemory) % Util::Memory::PAGESIZE);
-
+    auto physicalAddress = reinterpret_cast<uint32_t>(Kernel::System::getService<Kernel::MemoryService>().getPhysicalAddress(dmaMemory));
     Isa::selectChannel(2);
     Isa::setAddress(2, physicalAddress);
     Isa::setCount(2, static_cast<uint16_t>(device.getSectorSize() * sectorCount - 1));

@@ -66,7 +66,7 @@ uint32_t calculateLength(const Util::File::File &beepFile) {
 
 int32_t main(int32_t argc, char *argv[]) {
     if (argc < 2) {
-        Util::System::error << "music: No arguments provided!" << Util::Stream::PrintWriter::endl << Util::Stream::PrintWriter::flush;
+        Util::System::error << "beep: No arguments provided!" << Util::Stream::PrintWriter::endl << Util::Stream::PrintWriter::flush;
         return -1;
     }
 
