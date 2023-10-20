@@ -30,6 +30,8 @@ namespace Device::Storage {
        */
         ~NvmeController() override = default;
 
+        static void initializeAvailableControllers();
+
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;

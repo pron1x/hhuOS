@@ -46,6 +46,7 @@
 #include "device/pci/Pci.h"
 #include "device/storage/floppy/FloppyController.h"
 #include "device/storage/ide/IdeController.h"
+#include "device/storage/nvme/NvmeController.h"
 #include "kernel/service/StorageService.h"
 #include "filesystem/fat/FatDriver.h"
 #include "device/sound/speaker/PcSpeakerNode.h"
@@ -462,6 +463,7 @@ void GatesOfHell::initializePowerManagement() {
 
 void GatesOfHell::initializeStorage() {
     Device::Storage::IdeController::initializeAvailableControllers();
+    Device::Storage::NvmeController::initializeAvailableControllers();
 
     if (Device::Storage::FloppyController::isAvailable()) {
         auto *floppyController = new Device::Storage::FloppyController();
