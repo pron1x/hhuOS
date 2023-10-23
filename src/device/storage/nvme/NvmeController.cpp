@@ -34,7 +34,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         // Map physical address to memory
         void* virtualAddress = memoryService.mapIO(physicalAddress, size);
 
-        uint32_t* Version = reinterpret_cast<uint32_t*>(virtualAddress + 0x8); // Version Offset: 0x8;
+        uint32_t* Version = reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::VS); // Version Offset: 0x8;
         uint32_t mjr, mnr, ter, ver;
         ver = *Version;
         mjr = (ver >> 16) & 0xFFFF;
@@ -42,6 +42,41 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         ter = ver & 0xFF;
 
         log.info("Controller Version: %d.%d.%d", mjr, mnr, ter);
+
+        /**
+         * Due to hhuOS being 32bit, we split the Capabilities into lower and upper part.
+        */
+        uint32_t capabilitiesUpper = *(reinterpret_cast<uint32_t*>(virtualAddress + 0x4));
+        uint32_t capabilitiesLower = *(reinterpret_cast<uint32_t*>(virtualAddress));
+
+        log.info("Capabilites: %x %x", capabilitiesUpper, capabilitiesLower);
+
+        uint16_t maxQueueEnties = capabilitiesLower & 0xFFFF;
+
+        /**
+         * Controller needs to support NVM command subset
+        */
+        uint8_t CSS = ((capabilitiesUpper >> 5) & 0xFF);
+        uint8_t nvmCommand = CSS & 0x1;
+        uint8_t adminCommand = (CSS >> 7) & 0x1;
+
+        /**
+         * Doorbell Stride is used to calculate Submission/Completion Queue Offsets
+        */
+        uint32_t doorbellStride = 1 << (2 + ((capabilitiesUpper) & 0xF));
+
+        log.info("Max Queue Entries supported: %d", maxQueueEnties);
+        log.info("Command sets supported. NVM command set %d, Admin only: %d", nvmCommand, adminCommand);
+        log.info("Doorbell Stride: %d", doorbellStride);
+
+
+        /**
+         * hhuOS has 4kB aligned, if minPageSize is > 4kB Controller can't be initialized. 
+         * This shouldn't happen with V1.4 controllers
+        */
+        uint32_t minPageSize = 1 << (12 + ((capabilitiesUpper >> 48) & 0xF));
+        uint32_t maxPageSize = 1 << (12 + ((capabilitiesUpper >> 52) & 0xF));
+        log.info("Min page size: %d, Max page size: %d", minPageSize, maxPageSize);
     }
 
     void NvmeController::initializeAvailableControllers() {

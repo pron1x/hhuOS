@@ -39,7 +39,7 @@ namespace Device::Storage {
         private:
         static Kernel::Logger log;
 
-        enum ControllerRegisters : uint32_t {
+        enum ControllerRegister : uint32_t {
             CAP     = 0x0,      // Controller Capabilities, 64bit
             VS      = 0x8,      // Version, 32bit
             INTMS   = 0xC,      // Interrupt Mask Set, 32bit
