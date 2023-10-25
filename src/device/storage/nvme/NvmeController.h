@@ -80,6 +80,18 @@ namespace Device::Storage {
             } bits;
         };
 
+        union ControllerStatus {
+            uint32_t csts;
+            struct {
+                unsigned RDY    : 1;
+                unsigned CFS    : 1;
+                unsigned SHST   : 2;
+                unsigned NSSRO  : 1;
+                unsigned PP     : 1;
+                unsigned _RSRVD : 26;
+            } bits;
+        };
+
     };
 }
 

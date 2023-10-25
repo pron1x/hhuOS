@@ -6,6 +6,9 @@
 #include "device/pci/Pci.h"
 #include "device/pci/PciDevice.h"
 
+#include "lib/util/async/Thread.h"
+#include "lib/util/time/Timestamp.h"
+
 namespace Device::Storage {
 Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
@@ -88,6 +91,22 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
        ControllerConfiguration conf;
        conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
        log.info("Enabled: %x", conf.bits.EN);
+
+       ControllerStatus status;
+       status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+       log.info("Ready: %x", status.bits.RDY);
+
+        /**
+         * Controller reset, disable and reenable controller
+        */
+       conf.bits.EN = 0;
+       *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+       status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+       log.info("Controller ready status: %x", status.bits.RDY);
+       if(status.bits.RDY) {Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));}
+       status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+       log.info("Controller ready status (after timeout): %x", status.bits.RDY);
+       
 
     }
 
