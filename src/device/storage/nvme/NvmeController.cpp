@@ -77,6 +77,18 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         uint32_t minPageSize = 1 << (12 + ((capabilitiesUpper >> 48) & 0xF));
         uint32_t maxPageSize = 1 << (12 + ((capabilitiesUpper >> 52) & 0xF));
         log.info("Min page size: %d, Max page size: %d", minPageSize, maxPageSize);
+
+        /**
+         * Worst case wait time for CC.RDY to flip after CC.EN flips.
+         * The field is in 500ms units so we multiply by 500.
+        */
+       uint32_t timeout = ((capabilitiesLower >> 24) & 0xFF) * 500;
+       log.info("Worst case timeout: %dms", timeout);
+
+       ControllerConfiguration conf;
+       conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
+       log.info("Enabled: %x", conf.bits.EN);
+
     }
 
     void NvmeController::initializeAvailableControllers() {

@@ -65,6 +65,21 @@ namespace Device::Storage {
             PMRMSC  = 0xE14     // Persisten Memory Region Memory Space Control, 64bit (Optional)
         };
 
+        union ControllerConfiguration {
+            uint32_t cc;
+            struct {
+                unsigned EN         : 1;
+                unsigned _RESERVED0 : 3;
+                unsigned CSS        : 3;
+                unsigned MPS        : 4;
+                unsigned AMS        : 3;
+                unsigned SHN        : 2;
+                unsigned IOSQES     : 4;
+                unsigned IOCQES     : 4;
+                unsigned _RESERVED1 : 8;
+            } bits;
+        };
+
     };
 }
 
