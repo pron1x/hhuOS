@@ -38,7 +38,10 @@ namespace Device::Storage {
         
         private:
         static Kernel::Logger log;
+        void* crBaseAddress;
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
+
+        void mapBaseAddressRegister(const PciDevice &pciDevice);
 
         enum ControllerRegister : uint32_t {
             CAP     = 0x0,      // Controller Capabilities, 64bit

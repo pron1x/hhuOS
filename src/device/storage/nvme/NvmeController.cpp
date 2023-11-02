@@ -22,22 +22,9 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         command |= Pci::Command::BUS_MASTER | Pci::Command::MEMORY_SPACE;
         pciDevice.writeWord(Pci::COMMAND, command);
 
-        // Calculate size for memory mapping
-        uint32_t bar0 = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_0);
-        pciDevice.writeDoubleWord(Pci::BASE_ADDRESS_0, 0xFFFFFFFF);
-        uint32_t size = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_0) & 0xFFFFFFF0;
-        pciDevice.writeDoubleWord(Pci::BASE_ADDRESS_0, bar0);
-
-        size = ~size + 1;
-
-        // Get physical address from BAR0 + BAR1;
-        uint32_t bar1 = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_1);
-        uint64_t physicalAddress = ((bar0 & 0xFFFFFFF0) + ((bar1 &0xFFFFFFFF) << 32));
-
-        // Map physical address to memory
-        void* virtualAddress = memoryService.mapIO(physicalAddress, size);
-
-        uint32_t* Version = reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::VS); // Version Offset: 0x8;
+        mapBaseAddressRegister(pciDevice);
+        
+        uint32_t* Version = reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::VS); // Version Offset: 0x8;
         uint32_t mjr, mnr, ter, ver;
         ver = *Version;
         mjr = (ver >> 16) & 0xFFFF;
@@ -50,8 +37,8 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * Due to hhuOS being 32bit, we split the Capabilities into lower and upper part.
          * TODO: Try and turn Capabilities into Union/Struct.
         */
-        uint32_t capabilitiesUpper = *(reinterpret_cast<uint32_t*>(virtualAddress + 0x4));
-        uint32_t capabilitiesLower = *(reinterpret_cast<uint32_t*>(virtualAddress));
+        uint32_t capabilitiesUpper = *(reinterpret_cast<uint32_t*>(crBaseAddress + 0x4));
+        uint32_t capabilitiesLower = *(reinterpret_cast<uint32_t*>(crBaseAddress));
 
         log.info("Capabilites: %x %x", capabilitiesUpper, capabilitiesLower);
 
@@ -90,36 +77,36 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         log.info("Worst case timeout: %dms", timeout);
 
         ControllerConfiguration conf;
-        conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
+        conf.cc =  *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC);
         log.info("Enabled: %x", conf.bits.EN);
 
         ControllerStatus status;
-        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
         log.info("Ready: %x", status.bits.RDY);
 
         /**
          * Controller reset, disable and reenable controller
         */
         conf.bits.EN = 0;
-        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
-        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
         log.info("Controller ready status: %x", status.bits.RDY);
         /**
          * Wait time specified in CAP.TO if RDY reads 1 after disabling
         */
         if(status.bits.RDY != 0) {Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));}
-        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
         log.info("Controller ready status (after timeout): %x", status.bits.RDY);
 
         /**
          * Write Controller Configuration to include correct MemoryPageSize and Command Set
         */
-        conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
+        conf.cc =  *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC);
 
         conf.bits.MPS = 0;  // Set Memory Page Size (4096)
         conf.bits.CSS = 0;  // NVM Command Set
 
-        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
 
         /**
          * Create Admin Submission and Admin Completion Queue Memory, write it in controller register.
@@ -133,24 +120,24 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCompletionEntry));
         void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
 
-        *reinterpret_cast<uint64_t*>(virtualAddress + (uint8_t)ControllerRegister::ACQ) = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
-        *reinterpret_cast<uint64_t*>(virtualAddress + (uint8_t)ControllerRegister::ASQ) = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
+        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ACQ) = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
+        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ASQ) = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
 
         
         /**
          * TODO: AQA Struct 
         */
-        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::AQA) = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
+        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::AQA) = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
         
         // Set enable to 1
-        conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
+        conf.cc =  *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC);
         conf.bits.EN = 1;
 
-        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
 
         // Wait for RDY to be 1
-        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
         if(status.bits.RDY == 0) Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
         log.info("NVMe Controller configured and reenabled + ready!");
 
@@ -170,4 +157,22 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
 
     }
+
+    void NvmeController::mapBaseAddressRegister(const PciDevice &pciDevice) {
+        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
+
+        uint32_t bar0 = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_0);
+        pciDevice.writeDoubleWord(Pci::BASE_ADDRESS_0, 0xFFFFFFFF);
+        uint32_t size = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_0) & 0xFFFFFFF0;
+        pciDevice.writeDoubleWord(Pci::BASE_ADDRESS_0, bar0);
+
+        size = ~size + 1;
+
+        // Get physical address from BAR0 + BAR1;
+        uint32_t bar1 = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_1);
+        uint64_t physicalAddress = ((bar0 & 0xFFFFFFF0) + ((bar1 &0xFFFFFFFF) << 32));
+
+        // Map physical address to memory
+        crBaseAddress = memoryService.mapIO(physicalAddress, size);
+    };
 }
