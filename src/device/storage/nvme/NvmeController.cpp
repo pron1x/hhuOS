@@ -48,6 +48,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
         /**
          * Due to hhuOS being 32bit, we split the Capabilities into lower and upper part.
+         * TODO: Try and turn Capabilities into Union/Struct.
         */
         uint32_t capabilitiesUpper = *(reinterpret_cast<uint32_t*>(virtualAddress + 0x4));
         uint32_t capabilitiesLower = *(reinterpret_cast<uint32_t*>(virtualAddress));
@@ -85,28 +86,73 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * Worst case wait time for CC.RDY to flip after CC.EN flips.
          * The field is in 500ms units so we multiply by 500.
         */
-       uint32_t timeout = ((capabilitiesLower >> 24) & 0xFF) * 500;
-       log.info("Worst case timeout: %dms", timeout);
+        uint32_t timeout = ((capabilitiesLower >> 24) & 0xFF) * 500;
+        log.info("Worst case timeout: %dms", timeout);
 
-       ControllerConfiguration conf;
-       conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
-       log.info("Enabled: %x", conf.bits.EN);
+        ControllerConfiguration conf;
+        conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
+        log.info("Enabled: %x", conf.bits.EN);
 
-       ControllerStatus status;
-       status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
-       log.info("Ready: %x", status.bits.RDY);
+        ControllerStatus status;
+        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        log.info("Ready: %x", status.bits.RDY);
 
         /**
          * Controller reset, disable and reenable controller
         */
-       conf.bits.EN = 0;
-       *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
-       status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
-       log.info("Controller ready status: %x", status.bits.RDY);
-       if(status.bits.RDY) {Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));}
-       status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
-       log.info("Controller ready status (after timeout): %x", status.bits.RDY);
-       
+        conf.bits.EN = 0;
+        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        log.info("Controller ready status: %x", status.bits.RDY);
+        /**
+         * Wait time specified in CAP.TO if RDY reads 1 after disabling
+        */
+        if(status.bits.RDY != 0) {Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));}
+        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        log.info("Controller ready status (after timeout): %x", status.bits.RDY);
+
+        /**
+         * Write Controller Configuration to include correct MemoryPageSize and Command Set
+        */
+        conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
+
+        conf.bits.MPS = 0;  // Set Memory Page Size (4096)
+        conf.bits.CSS = 0;  // NVM Command Set
+
+        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+
+        /**
+         * Create Admin Submission and Admin Completion Queue Memory, write it in controller register.
+         * TODO: Queue size can be calculated from queue entry amount -> implement queue entry struct
+         * TODO: Tail and Headdoorbells point at queue entries, create as pointers to queue entries.
+        */
+
+        void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCommand));
+        void* aSubQueuePhysical = memoryService.getPhysicalAddress(aSubQueueVirtual);
+
+        void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCompletionEntry));
+        void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
+
+        *reinterpret_cast<uint64_t*>(virtualAddress + (uint8_t)ControllerRegister::ACQ) = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
+        *reinterpret_cast<uint64_t*>(virtualAddress + (uint8_t)ControllerRegister::ASQ) = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
+
+        
+        /**
+         * TODO: AQA Struct 
+        */
+        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::AQA) = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
+        log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
+        
+        // Set enable to 1
+        conf.cc =  *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC);
+        conf.bits.EN = 1;
+
+        *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+
+        // Wait for RDY to be 1
+        status.csts = *reinterpret_cast<uint32_t*>(virtualAddress + (uint8_t)ControllerRegister::CSTS);
+        if(status.bits.RDY == 0) Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
+        log.info("NVMe Controller configured and reenabled + ready!");
 
     }
 

@@ -38,6 +38,7 @@ namespace Device::Storage {
         
         private:
         static Kernel::Logger log;
+        static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
 
         enum ControllerRegister : uint32_t {
             CAP     = 0x0,      // Controller Capabilities, 64bit
@@ -90,6 +91,42 @@ namespace Device::Storage {
                 unsigned PP     : 1;
                 unsigned _RSRVD : 26;
             } bits;
+        };
+
+
+        struct NvmeCommand {
+            struct {
+                uint8_t OPC;
+                unsigned FUSE : 2;
+                unsigned reserved : 4;
+                unsigned PSDT : 2;
+                unsigned CID : 16;
+            } CDW0;
+            uint64_t NSID;
+            uint64_t _reserved0;
+            uint64_t MPTR;
+            uint64_t PRP1;
+            uint64_t PRP2;
+            uint32_t CDW10;
+            uint32_t CDW11;
+            uint32_t CDW12;
+            uint32_t CDW13;
+            uint32_t CDW14;
+            uint32_t CDW15;
+        };
+
+        struct NvmeCompletionEntry {
+            uint32_t DW0;
+            uint32_t reserved0;
+            struct {
+                uint16_t SQHeadPointer;
+                uint16_t SQIdentifier;
+            } DW2;
+            struct {
+                unsigned CommandIdentifier : 16;
+                unsigned P : 1;
+                unsigned SF : 15;
+            } DW3;
         };
 
     };
