@@ -24,7 +24,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
         mapBaseAddressRegister(pciDevice);
 
-        uint32_t* Version = reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::VS); // Version Offset: 0x8;
+        uint32_t* Version = reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::VS);
         uint32_t mjr, mnr, ter, ver;
         ver = *Version;
         mjr = (ver >> 16) & 0xFFFF;
@@ -38,8 +38,9 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * TODO: Try and turn Capabilities into Union/Struct.
          * Due to the 32bit limitation, 2 structs will be needed.
         */
-        lControllerCapabilities lcap;
-        uControllerCapabilities ucap;
+
+        lControllerCapabilities lcap = {};
+        uControllerCapabilities ucap = {};
         ucap.uCAP = *(reinterpret_cast<uint32_t*>(crBaseAddress + 0x4));
         lcap.lCAP = *(reinterpret_cast<uint32_t*>(crBaseAddress));
 
@@ -53,13 +54,14 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         /**
          * Controller needs to support NVM command subset
         */
-        //uint8_t CSS = ((capabilitiesUpper >> 5) & 0xFF);
+       
         uint8_t nvmCommand = (ucap.bits.CSS >> 0) & 0x1;
         uint8_t adminCommand = ((ucap.bits.CSS) >> 7) & 0x1;
 
         /**
          * Doorbell Stride is used to calculate Submission/Completion Queue Offsets
         */
+
         uint32_t doorbellStride = 1 << (2 + ucap.bits.DSTRD);
 
         log.info("Max Queue Entries supported: %d", maxQueueEnties);
@@ -71,6 +73,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * hhuOS has 4kB aligned, if minPageSize is > 4kB Controller can't be initialized. 
          * This shouldn't happen with V1.4 controllers
         */
+
         uint32_t minPageSize = 1 << (12 + ucap.bits.MPSMIN);
         uint32_t maxPageSize = 1 << (12 + ucap.bits.MPSMAX);
         log.info("Min page size: %d, Max page size: %d", minPageSize, maxPageSize);
@@ -79,40 +82,36 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * Worst case wait time for CC.RDY to flip after CC.EN flips.
          * The field is in 500ms units so we multiply by 500.
         */
+
         uint32_t timeout = lcap.bits.TO * 500;
         log.info("Worst case timeout: %dms", timeout);
 
-        ControllerConfiguration conf;
-        conf.cc =  *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC);
-        log.info("Enabled: %x", conf.bits.EN);
+        ControllerConfiguration* conf = reinterpret_cast<ControllerConfiguration*>(crBaseAddress) + ControllerRegister::CC/sizeof(ControllerConfiguration);
+        log.info("Enabled: %x", conf->bits.EN);
 
-        ControllerStatus status;
-        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
-        log.info("Ready: %x", status.bits.RDY);
+        ControllerStatus* status = reinterpret_cast<ControllerStatus*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(ControllerStatus);
+        log.info("Ready: %x", status->bits.RDY);
 
         /**
-         * Controller reset, disable and reenable controller
+         * Controller reset: disable, configure and reenable controller
         */
-        conf.bits.EN = 0;
-        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
-        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
-        log.info("Controller ready status: %x", status.bits.RDY);
+
+        conf->bits.EN = 0;
+        log.info("Controller ready status: %x (Enabled: %x)", status->bits.RDY, conf->bits.EN);
+
         /**
          * Wait time specified in CAP.TO if RDY reads 1 after disabling
         */
-        if(status.bits.RDY != 0) {Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));}
-        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
-        log.info("Controller ready status (after timeout): %x", status.bits.RDY);
+
+        if(status->bits.RDY != 0) {Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));}
+        log.info("Controller ready status (after potential timeout): %x (Enabled: %x)", status->bits.RDY, conf->bits.EN);
 
         /**
          * Write Controller Configuration to include correct MemoryPageSize and Command Set
         */
-        conf.cc =  *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC);
 
-        conf.bits.MPS = 0;  // Set Memory Page Size (4096)
-        conf.bits.CSS = 0;  // NVM Command Set
-
-        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+        conf->bits.MPS = 0;  // Set Memory Page Size (4096)
+        conf->bits.CSS = 0;  // NVM Command Set
 
         /**
          * Create Admin Submission and Admin Completion Queue Memory, write it in controller register.
@@ -137,15 +136,14 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
         
         // Set enable to 1
-        conf.cc =  *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC);
-        conf.bits.EN = 1;
-
-        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CC) = conf.cc;
+        conf->bits.EN = 1;
 
         // Wait for RDY to be 1
-        status.csts = *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::CSTS);
-        if(status.bits.RDY == 0) Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
-        log.info("NVMe Controller configured and reenabled + ready!");
+        log.info("Controller Status after reenable: %x (Enabled: %x)", status->bits.RDY, conf->bits.EN);
+        if(status->bits.RDY == 0) {
+            Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
+        }
+        log.info("NVMe Controller configured and reenabled + ready! (RDY: %x Enabled: %x)", status->bits.RDY, conf->bits.EN);
 
     }
 
