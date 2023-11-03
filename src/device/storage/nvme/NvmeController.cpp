@@ -38,30 +38,32 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * TODO: Try and turn Capabilities into Union/Struct.
          * Due to the 32bit limitation, 2 structs will be needed.
         */
-        uint32_t capabilitiesUpper = *(reinterpret_cast<uint32_t*>(crBaseAddress + 0x4));
-        uint32_t capabilitiesLower = *(reinterpret_cast<uint32_t*>(crBaseAddress));
-        ControllerCapabilities caps = *(reinterpret_cast<ControllerCapabilities*>(crBaseAddress) + ControllerRegister::CAP / sizeof(ControllerCapabilities));
+        lControllerCapabilities lcap;
+        uControllerCapabilities ucap;
+        ucap.uCAP = *(reinterpret_cast<uint32_t*>(crBaseAddress + 0x4));
+        lcap.lCAP = *(reinterpret_cast<uint32_t*>(crBaseAddress));
 
-        log.info("Capabilites: %x %x", capabilitiesUpper, capabilitiesLower);
+        log.info("Capabilites: %x %x", ucap.uCAP, lcap.lCAP);
         log.info("MQES: %x CQR: %x AMS: %x TO: %x DSTRD: %x NSSRS: %x CSS: %x BPS: %x MPSMIN: %x MPSMAX: %x PMRS: %x CMBS: %x", 
-                caps.MQES, caps.CQR, caps.AMS, caps.TO, caps.DSTRD, caps.NSSRS, caps.CSS.css, caps.BPS, caps.MPSMIN, caps.MPSMAX, caps.PMRS, caps.CMBS);
+                lcap.bits.MQES, lcap.bits.CQR, lcap.bits.AMS, lcap.bits.TO, ucap.bits.DSTRD, ucap.bits.NSSRS, ucap.bits.CSS, 
+                ucap.bits.BPS, ucap.bits.MPSMIN, ucap.bits.MPSMAX, ucap.bits.PMRS, ucap.bits.CMBS);
 
-        uint16_t maxQueueEnties = caps.MQES;
+        uint16_t maxQueueEnties = lcap.bits.MQES;
 
         /**
          * Controller needs to support NVM command subset
         */
         //uint8_t CSS = ((capabilitiesUpper >> 5) & 0xFF);
-        uint8_t nvmCommand = caps.CSS.bits.NVMCommandSet;
-        uint8_t adminCommand = caps.CSS.bits.NoIOSupport;
+        uint8_t nvmCommand = (ucap.bits.CSS >> 0) & 0x1;
+        uint8_t adminCommand = ((ucap.bits.CSS) >> 7) & 0x1;
 
         /**
          * Doorbell Stride is used to calculate Submission/Completion Queue Offsets
         */
-        uint32_t doorbellStride = 1 << (2 + caps.DSTRD);
+        uint32_t doorbellStride = 1 << (2 + ucap.bits.DSTRD);
 
         log.info("Max Queue Entries supported: %d", maxQueueEnties);
-        log.info("Command sets supported. NVM command set %d, Admin only: %d. Bits: %x", nvmCommand, adminCommand, caps.CSS.css);
+        log.info("Command sets supported. NVM command set %d, Admin only: %d. Bits: %x", nvmCommand, adminCommand, ucap.bits.CSS);
         log.info("Doorbell Stride: %d", doorbellStride);
 
 
@@ -69,15 +71,15 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * hhuOS has 4kB aligned, if minPageSize is > 4kB Controller can't be initialized. 
          * This shouldn't happen with V1.4 controllers
         */
-        uint32_t minPageSize = 1 << (12 + caps.MPSMIN);
-        uint32_t maxPageSize = 1 << (12 + caps.MPSMAX);
+        uint32_t minPageSize = 1 << (12 + ucap.bits.MPSMIN);
+        uint32_t maxPageSize = 1 << (12 + ucap.bits.MPSMAX);
         log.info("Min page size: %d, Max page size: %d", minPageSize, maxPageSize);
 
         /**
          * Worst case wait time for CC.RDY to flip after CC.EN flips.
          * The field is in 500ms units so we multiply by 500.
         */
-        uint32_t timeout = caps.TO * 500;
+        uint32_t timeout = lcap.bits.TO * 500;
         log.info("Worst case timeout: %dms", timeout);
 
         ControllerConfiguration conf;
