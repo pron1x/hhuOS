@@ -24,9 +24,8 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
         mapBaseAddressRegister(pciDevice);
 
-        uint32_t* Version = reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::VS);
         uint32_t mjr, mnr, ter, ver;
-        ver = *Version;
+        ver = crBaseAddress[ControllerRegister::VS/sizeof(uint32_t)];
         mjr = (ver >> 16) & 0xFFFF;
         mnr = (ver >> 8) & 0xFF;
         ter = ver & 0xFF;
@@ -41,8 +40,8 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
         lControllerCapabilities lcap = {};
         uControllerCapabilities ucap = {};
-        ucap.uCAP = *(reinterpret_cast<uint32_t*>(crBaseAddress + 0x4));
-        lcap.lCAP = *(reinterpret_cast<uint32_t*>(crBaseAddress));
+        lcap.lCAP = crBaseAddress[ControllerRegister::LCAP/sizeof(uint32_t)];
+        ucap.uCAP = crBaseAddress[ControllerRegister::UCAP/sizeof(uint32_t)];
 
         log.info("Capabilites: %x %x", ucap.uCAP, lcap.lCAP);
         log.info("MQES: %x CQR: %x AMS: %x TO: %x DSTRD: %x NSSRS: %x CSS: %x BPS: %x MPSMIN: %x MPSMAX: %x PMRS: %x CMBS: %x", 
@@ -88,8 +87,8 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
         ControllerConfiguration conf;
         ControllerStatus status;
-        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
-        status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+        conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
+        status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
 
         /**
          * Controller reset: disable, configure and reenable controller
@@ -105,15 +104,15 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
             if(status.bits.SHST == 0b00 || status.bits.CFS) { // Need to check for both fatal state and no shutdown notification
                 // Full shutdown required
                 log.info("Shutting down controller...");
-                conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+                conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
                 conf.bits.SHN = 0b10; // Abrupt shutdown notification due to fatal state
-                *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+                crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)] = conf.cc;
                 Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout)); // Wait for shutdown to complete
 
-                status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+                status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
                 if(status.bits.SHST != 0b10) { //shutdown not complete, wait more
                     Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
-                    status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+                    status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
                     if(status.bits.SHST != 0b10) {
                         // Failed to shutdown controller
                         log.error("Failed to shutdown controller!");
@@ -122,16 +121,16 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
                 }
             } //Shutdown should be completed
             log.info("Resetting controller...");
-            conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+            conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
             conf.bits.EN = 0;
-            conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+            crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)] = conf.cc;
             Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout)); // Wait worst case timeout for RDY to flip to 0
             
-            status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+            status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
             if(status.bits.RDY != 0) {
                 // Wait more
                 Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
-                status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+                status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
                 if(status.bits.RDY != 0) {
                     log.warn("Failed to reset/disable the controller!");
                     // Controller cannot be initialized, check how to exit constructor!
@@ -150,7 +149,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * TODO: Tail and Headdoorbells point at queue entries, create as pointers to queue entries.
         */
 
-        *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::AQA) = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
+        crBaseAddress[ControllerRegister::AQA/sizeof(uint32_t)] = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
 
         void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCommand));
@@ -159,36 +158,36 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCompletionEntry));
         void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
         
-        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ACQ) = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
-        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ASQ) = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
+        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ACQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
+        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ASQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
         
         /**
          * Write Controller Configuration to select arbitration mechanism, memory page size and command set
         */
         log.info("Configuring controller AMS, MPS and CSS.");
-        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+        conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         conf.bits.AMS = 0b000;  // Round Robin
         conf.bits.MPS = 0;      // Set Memory Page Size (4096)
         conf.bits.CSS = 0b000;  // NVM Command Set
-        *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+        crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)] = conf.cc;
 
         // Set enable to 1
         log.info("Enabling controller.");
-        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+        conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         conf.bits.EN = 1;
-        *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+        crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)] = conf.cc;
         
-        status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
-        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+        status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
+        conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         
         // Wait for RDY to be 1
         if(status.bits.RDY == 0) {
             Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
         }
         
-        status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
-        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
-        log.info("NVMe Controller configured and reenabled + ready! (RDY: %x Enabled: %x)", status.bits.RDY, conf.bits.EN);
+        status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
+        conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
+        log.info("NVMe Controller configured. (RDY: %x Enabled: %x)", status.bits.RDY, conf.bits.EN);
     }
 
     void NvmeController::initializeAvailableControllers() {
@@ -221,6 +220,6 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         uint64_t physicalAddress = ((bar0 & 0xFFFFFFF0) + ((bar1 &0xFFFFFFFF) << 32));
 
         // Map physical address to memory
-        crBaseAddress = memoryService.mapIO(physicalAddress, size);
+        crBaseAddress = reinterpret_cast<uint32_t*>(memoryService.mapIO(physicalAddress, size));
     };
 }

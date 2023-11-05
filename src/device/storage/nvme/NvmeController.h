@@ -38,7 +38,11 @@ namespace Device::Storage {
         
         private:
         static Kernel::Logger log;
-        void* crBaseAddress;
+        /**
+         * hhuOS is 32bit, if access to 64 bit registers (mainly memory addresses)
+         * is required, we cast to 64bit pointer.
+        */
+        uint32_t* crBaseAddress;
         uint32_t doorbellStride;
         uint32_t timeout;
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
@@ -46,7 +50,8 @@ namespace Device::Storage {
         void mapBaseAddressRegister(const PciDevice &pciDevice);
 
         enum ControllerRegister : uint32_t {
-            CAP     = 0x0,      // Controller Capabilities, 64bit
+            LCAP    = 0x0,      // Lower Controller Capabilities, 32bit
+            UCAP    = 0x4,      // Upper Controller Capabilites, 32bit
             VS      = 0x8,      // Version, 32bit
             INTMS   = 0xC,      // Interrupt Mask Set, 32bit
             INTMC   = 0x10,     // Interrupt Mask Clear, 32bit
