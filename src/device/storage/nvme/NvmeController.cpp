@@ -62,7 +62,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * Doorbell Stride is used to calculate Submission/Completion Queue Offsets
         */
 
-        uint32_t doorbellStride = 1 << (2 + ucap.bits.DSTRD);
+        doorbellStride = 1 << (2 + ucap.bits.DSTRD);
 
         log.info("Max Queue Entries supported: %d", maxQueueEnties);
         log.info("Command sets supported. NVM command set %d, Admin only: %d. Bits: %x", nvmCommand, adminCommand, ucap.bits.CSS);
@@ -83,13 +83,12 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
          * The field is in 500ms units so we multiply by 500.
         */
 
-        uint32_t timeout = lcap.bits.TO * 500;
+        timeout = lcap.bits.TO * 500;
         log.info("Worst case timeout: %dms", timeout);
 
         ControllerConfiguration conf;
         ControllerStatus status;
         conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
-
         status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
 
         /**
@@ -164,7 +163,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ASQ) = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
         
         /**
-         * Write Controller Configuration to select aritration mechanism, memory page size and command set
+         * Write Controller Configuration to select arbitration mechanism, memory page size and command set
         */
         log.info("Configuring controller AMS, MPS and CSS.");
         conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
@@ -172,7 +171,6 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         conf.bits.MPS = 0;      // Set Memory Page Size (4096)
         conf.bits.CSS = 0b000;  // NVM Command Set
         *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
-
 
         // Set enable to 1
         log.info("Enabling controller.");

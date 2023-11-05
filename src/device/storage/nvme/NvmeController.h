@@ -39,6 +39,8 @@ namespace Device::Storage {
         private:
         static Kernel::Logger log;
         void* crBaseAddress;
+        uint32_t doorbellStride;
+        uint32_t timeout;
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
 
         void mapBaseAddressRegister(const PciDevice &pciDevice);
