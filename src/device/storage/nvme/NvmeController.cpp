@@ -86,65 +86,111 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         uint32_t timeout = lcap.bits.TO * 500;
         log.info("Worst case timeout: %dms", timeout);
 
-        ControllerConfiguration* conf = reinterpret_cast<ControllerConfiguration*>(crBaseAddress) + ControllerRegister::CC/sizeof(ControllerConfiguration);
-        log.info("Enabled: %x", conf->bits.EN);
+        ControllerConfiguration conf;
+        ControllerStatus status;
+        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
 
-        ControllerStatus* status = reinterpret_cast<ControllerStatus*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(ControllerStatus);
-        log.info("Ready: %x", status->bits.RDY);
+        status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
 
         /**
          * Controller reset: disable, configure and reenable controller
         */
 
-        conf->bits.EN = 0;
-        log.info("Controller ready status: %x (Enabled: %x)", status->bits.RDY, conf->bits.EN);
-
         /**
-         * Wait time specified in CAP.TO if RDY reads 1 after disabling
+         * Check if controller needs reset: Ready or Fatal State
         */
 
-        if(status->bits.RDY != 0) {Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));}
-        log.info("Controller ready status (after potential timeout): %x (Enabled: %x)", status->bits.RDY, conf->bits.EN);
+        if(status.bits.RDY || status.bits.CFS) {
+            log.info("Controller needs to be reset.");
+            if(status.bits.CFS) log.warn("Controller in fatal state.");
+            if(status.bits.SHST == 0b00 || status.bits.CFS) { // Need to check for both fatal state and no shutdown notification
+                // Full shutdown required
+                log.info("Shutting down controller...");
+                conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+                conf.bits.SHN = 0b10; // Abrupt shutdown notification due to fatal state
+                *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+                Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout)); // Wait for shutdown to complete
 
+                status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+                if(status.bits.SHST != 0b10) { //shutdown not complete, wait more
+                    Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
+                    status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+                    if(status.bits.SHST != 0b10) {
+                        // Failed to shutdown controller
+                        log.error("Failed to shutdown controller!");
+                        // Controller cannot be initialized, check how to exit constructor!
+                    }
+                }
+            } //Shutdown should be completed
+            log.info("Resetting controller...");
+            conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+            conf.bits.EN = 0;
+            conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+            Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout)); // Wait worst case timeout for RDY to flip to 0
+            
+            status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+            if(status.bits.RDY != 0) {
+                // Wait more
+                Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
+                status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+                if(status.bits.RDY != 0) {
+                    log.warn("Failed to reset/disable the controller!");
+                    // Controller cannot be initialized, check how to exit constructor!
+                }
+            }
+        } else {
+            log.info("Controller does not need to be reset.");
+        }
+        
+        log.info("Configuring controller admin queue.");
         /**
-         * Write Controller Configuration to include correct MemoryPageSize and Command Set
-        */
-
-        conf->bits.MPS = 0;  // Set Memory Page Size (4096)
-        conf->bits.CSS = 0;  // NVM Command Set
-
-        /**
+         * Controller is ready to be configured. Refer to 7.6.1 Initialization.
          * Create Admin Submission and Admin Completion Queue Memory, write it in controller register.
+         * TODO: AQA Struct
          * TODO: Queue size can be calculated from queue entry amount -> implement queue entry struct
          * TODO: Tail and Headdoorbells point at queue entries, create as pointers to queue entries.
         */
 
-        void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCommand));
-        void* aSubQueuePhysical = memoryService.getPhysicalAddress(aSubQueueVirtual);
-
-        void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCompletionEntry));
-        void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
-
-        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ACQ) = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
-        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ASQ) = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
-
-        
-        /**
-         * TODO: AQA Struct 
-        */
         *reinterpret_cast<uint32_t*>(crBaseAddress + (uint8_t)ControllerRegister::AQA) = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
-        
-        // Set enable to 1
-        conf->bits.EN = 1;
 
+        void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCommand));
+        void* aSubQueuePhysical = memoryService.getPhysicalAddress(aSubQueueVirtual);
+        
+        void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCompletionEntry));
+        void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
+        
+        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ACQ) = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
+        *reinterpret_cast<uint64_t*>(crBaseAddress + (uint8_t)ControllerRegister::ASQ) = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
+        
+        /**
+         * Write Controller Configuration to select aritration mechanism, memory page size and command set
+        */
+        log.info("Configuring controller AMS, MPS and CSS.");
+        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+        conf.bits.AMS = 0b000;  // Round Robin
+        conf.bits.MPS = 0;      // Set Memory Page Size (4096)
+        conf.bits.CSS = 0b000;  // NVM Command Set
+        *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+
+
+        // Set enable to 1
+        log.info("Enabling controller.");
+        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+        conf.bits.EN = 1;
+        *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t)) = conf.cc;
+        
+        status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+        
         // Wait for RDY to be 1
-        log.info("Controller Status after reenable: %x (Enabled: %x)", status->bits.RDY, conf->bits.EN);
-        if(status->bits.RDY == 0) {
+        if(status.bits.RDY == 0) {
             Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
         }
-        log.info("NVMe Controller configured and reenabled + ready! (RDY: %x Enabled: %x)", status->bits.RDY, conf->bits.EN);
-
+        
+        status.csts = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CSTS/sizeof(uint32_t));
+        conf.cc = *(reinterpret_cast<uint32_t*>(crBaseAddress) + ControllerRegister::CC/sizeof(uint32_t));
+        log.info("NVMe Controller configured and reenabled + ready! (RDY: %x Enabled: %x)", status.bits.RDY, conf.bits.EN);
     }
 
     void NvmeController::initializeAvailableControllers() {
