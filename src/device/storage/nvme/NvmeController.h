@@ -39,8 +39,7 @@ namespace Device::Storage {
         private:
         static Kernel::Logger log;
         /**
-         * hhuOS is 32bit, if access to 64 bit registers (mainly memory addresses)
-         * is required, we cast to 64bit pointer.
+         * hhuOS is 32bit, if access to 64 bit registerscis required, cast to 64bit pointer.
         */
         uint32_t* crBaseAddress;
         uint32_t doorbellStride;
@@ -48,6 +47,13 @@ namespace Device::Storage {
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
 
         void mapBaseAddressRegister(const PciDevice &pciDevice);
+
+        /**
+         * Calculates the offset for queue y doorbell register
+         * @param y Queue Y of which to get the offset
+         * @param completionQueue 0 for submission, 1 for completion
+        */
+        uint32_t getQueueDoorbellOffset(const uint32_t y, const uint8_t completionQueue);
 
         enum ControllerRegister : uint32_t {
             LCAP    = 0x0,      // Lower Controller Capabilities, 32bit
@@ -129,7 +135,6 @@ namespace Device::Storage {
                 unsigned _RSRVD : 26;
             } bits;
         };
-
 
         struct NvmeCommand {
             struct {

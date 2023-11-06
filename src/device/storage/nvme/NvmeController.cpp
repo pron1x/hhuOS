@@ -144,7 +144,6 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         /**
          * Controller is ready to be configured. Refer to 7.6.1 Initialization.
          * Create Admin Submission and Admin Completion Queue Memory, write it in controller register.
-         * TODO: AQA Struct
          * TODO: Queue size can be calculated from queue entry amount -> implement queue entry struct
          * TODO: Tail and Headdoorbells point at queue entries, create as pointers to queue entries.
         */
@@ -157,9 +156,13 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         
         void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCompletionEntry));
         void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
+
+
         
-        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ACQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aCmpQueuePhysical);    // Set Admin Completion Queue Address
-        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ASQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aSubQueuePhysical);    // Set Admin Submission Queue Address
+        // Set Admin Completion Queue Address
+        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ACQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aCmpQueuePhysical) & 0xFFFFFFFFFFFFF000;
+        // Set Admin Submission Queue Address
+        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ASQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aSubQueuePhysical) & 0xFFFFFFFFFFFFF000;
         
         /**
          * Write Controller Configuration to select arbitration mechanism, memory page size and command set
@@ -222,4 +225,9 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         // Map physical address to memory
         crBaseAddress = reinterpret_cast<uint32_t*>(memoryService.mapIO(physicalAddress, size));
     };
+
+    uint32_t NvmeController::getQueueDoorbellOffset(const uint32_t y, const uint8_t completionQueue) {
+        return (0x1000 + ((2 * y + completionQueue) * (4 << doorbellStride)))/sizeof(uint32_t);
+    };
+
 }
