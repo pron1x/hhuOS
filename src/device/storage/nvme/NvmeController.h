@@ -85,92 +85,57 @@ namespace Device::Storage {
         union lControllerCapabilities {
             uint32_t lCAP;
             struct {
-                unsigned MQES : 16;
-                unsigned CQR : 1;
-                unsigned AMS : 2;
-                unsigned reserved0 : 5;
-                unsigned TO : 8;
+                unsigned MQES       : 16;   // Maximum Queue Entries Supported
+                unsigned CQR        : 1;    // Contigous Queues Required
+                unsigned AMS        : 2;    // Arbitration Mechanism Supported
+                unsigned _reserved0 : 5;
+                unsigned TO         : 8;    // Timeout
             } bits;
         };
 
         union uControllerCapabilities {
             uint32_t uCAP;
             struct {
-                unsigned DSTRD : 4;
-                unsigned NSSRS : 1;
-                unsigned CSS : 8;
-                unsigned BPS : 1;
-                unsigned reserved2 : 2;
-                unsigned MPSMIN : 4;
-                unsigned MPSMAX : 4;
-                unsigned PMRS : 1;
-                unsigned CMBS : 1;
-                unsigned reserved3 : 6;
+                unsigned DSTRD      : 4;    // Doorbell Stride
+                unsigned NSSRS      : 1;    // NVM Subsystem Reset Supported
+                unsigned CSS        : 8;    // Command Sets Supported
+                unsigned BPS        : 1;    // Boot Partition Support
+                unsigned _reserved2 : 2;
+                unsigned MPSMIN     : 4;    // Memory Page Size Minimum (2 ^ (12 + MPSMIN))
+                unsigned MPSMAX     : 4;    // Memory Page Size Maximum (2 ^ (12 + MPSMAX))
+                unsigned PMRS       : 1;    // Persisten Memory Region Supported
+                unsigned CMBS       : 1;    // Controller Memory Buffer Supported
+                unsigned _reserved3 : 6;
             } bits;
         };
 
         union ControllerConfiguration {
             uint32_t cc;
             struct {
-                unsigned EN         : 1;
-                unsigned _RESERVED0 : 3;
-                unsigned CSS        : 3;
-                unsigned MPS        : 4;
-                unsigned AMS        : 3;
-                unsigned SHN        : 2;
-                unsigned IOSQES     : 4;
-                unsigned IOCQES     : 4;
-                unsigned _RESERVED1 : 8;
+                unsigned EN         : 1;    // Enable
+                unsigned _reserved0 : 3;
+                unsigned CSS        : 3;    // I/O Command Set Selected
+                unsigned MPS        : 4;    // Memory Page Size
+                unsigned AMS        : 3;    // Arbitration Mechanism Selected
+                unsigned SHN        : 2;    // Shutdown Notification
+                unsigned IOSQES     : 4;    // I/O Submission Queue Entry Size
+                unsigned IOCQES     : 4;    // I/O Completion Queue Entry Size
+                unsigned _reserved1 : 8;
             } bits;
         };
 
         union ControllerStatus {
             uint32_t csts;
             struct {
-                unsigned RDY    : 1;
-                unsigned CFS    : 1;
-                unsigned SHST   : 2;
-                unsigned NSSRO  : 1;
-                unsigned PP     : 1;
-                unsigned _RSRVD : 26;
+                unsigned RDY        : 1;    // Ready
+                unsigned CFS        : 1;    // Controller Fatal Status
+                unsigned SHST       : 2;    // Shtudown Status
+                unsigned NSSRO      : 1;    // NVM Subsystem Reset Occurred
+                unsigned PP         : 1;    // Processing Paused
+                unsigned _reserved0 : 26;
             } bits;
         };
-
-        struct NvmeCommand {
-            struct {
-                uint8_t OPC;
-                unsigned FUSE : 2;
-                unsigned reserved : 4;
-                unsigned PSDT : 2;
-                unsigned CID : 16;
-            } CDW0;
-            uint64_t NSID;
-            uint64_t _reserved0;
-            uint64_t MPTR;
-            uint64_t PRP1;
-            uint64_t PRP2;
-            uint32_t CDW10;
-            uint32_t CDW11;
-            uint32_t CDW12;
-            uint32_t CDW13;
-            uint32_t CDW14;
-            uint32_t CDW15;
-        };
-
-        struct NvmeCompletionEntry {
-            uint32_t DW0;
-            uint32_t reserved0;
-            struct {
-                uint16_t SQHeadPointer;
-                uint16_t SQIdentifier;
-            } DW2;
-            struct {
-                unsigned CommandIdentifier : 16;
-                unsigned P : 1;
-                unsigned SF : 15;
-            } DW3;
-        };
-
+        
     };
 }
 

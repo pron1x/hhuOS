@@ -1,4 +1,5 @@
 #include "NvmeController.h"
+#include "NvmeQueue.h"
 
 #include "kernel/log/Logger.h"
 #include "kernel/system/System.h"
@@ -144,17 +145,17 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         /**
          * Controller is ready to be configured. Refer to 7.6.1 Initialization.
          * Create Admin Submission and Admin Completion Queue Memory, write it in controller register.
-         * TODO: Queue size can be calculated from queue entry amount -> implement queue entry struct
          * TODO: Tail and Headdoorbells point at queue entries, create as pointers to queue entries.
         */
 
         crBaseAddress[ControllerRegister::AQA/sizeof(uint32_t)] = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
 
-        void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCommand));
+        // FIXME: Will be implemented using NvmeQueue
+        void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * 64);
         void* aSubQueuePhysical = memoryService.getPhysicalAddress(aSubQueueVirtual);
         
-        void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * sizeof(NvmeCompletionEntry));
+        void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * 16);
         void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
 
 
@@ -204,6 +205,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
     }
 
+    // Pin based interrupts, use Interrupt Mask Sets!
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
 
     }
