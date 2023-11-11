@@ -12,7 +12,9 @@ Kernel::Logger NvmeAdminQueue::log = Kernel::Logger::get("NVMEAdmin");
     void NvmeAdminQueue::Init(NvmeController* nvmeController, uint32_t size) {
         id = 0;
         nvme = nvmeController;
-        queue = NvmeQueue(nvme, id, size);
+        queue = new NvmeQueue(nvme, id, size);
+
+        nvme->setAdminQueueRegisters(queue->getSubmissionPhysicalAddress(), queue->getCompletionPhysicalAddress());
 
         log.info("Initialized Admin Queue with size %d.", size);
     };

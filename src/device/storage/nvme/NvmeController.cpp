@@ -1,5 +1,5 @@
 #include "NvmeController.h"
-#include "NvmeQueue.h"
+#include "NvmeAdminQueue.h"
 
 #include "kernel/log/Logger.h"
 #include "kernel/system/System.h"
@@ -15,8 +15,6 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
     NvmeController::NvmeController(const PciDevice &pciDevice) {
         log.info("Initializing controller [0x%04x:0x%04x]", pciDevice.getVendorId(), pciDevice.getDeviceId());
-
-        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
 
         //Enable Bus Master DMA and Memory Space Access
         uint16_t command = pciDevice.readWord(Pci::COMMAND);
@@ -151,21 +149,11 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         crBaseAddress[ControllerRegister::AQA/sizeof(uint32_t)] = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
 
-        // FIXME: Will be implemented using NvmeQueue
-        NvmeQueue adminQueue = NvmeQueue(this, 0, 2);
-        void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * 64);
-        void* aSubQueuePhysical = memoryService.getPhysicalAddress(aSubQueueVirtual);
+        // Initializes and configures both Admin Queue registers
+        NvmeAdminQueue adminQueue = NvmeAdminQueue();
+        adminQueue.Init(this, NVME_QUEUE_ENTRIES);
         
-        void* aCmpQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * 16);
-        void* aCmpQueuePhysical = memoryService.getPhysicalAddress(aCmpQueueVirtual);
-
-
-        
-        // Set Admin Completion Queue Address
-        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ACQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aCmpQueuePhysical) & 0xFFFFFFFFFFFFF000;
-        // Set Admin Submission Queue Address
-        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ASQ/sizeof(uint64_t)] = reinterpret_cast<uint64_t>(aSubQueuePhysical) & 0xFFFFFFFFFFFFF000;
-        
+      
         /**
          * Write Controller Configuration to select arbitration mechanism, memory page size and command set
         */
@@ -227,6 +215,11 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
         // Map physical address to memory
         crBaseAddress = reinterpret_cast<uint32_t*>(memoryService.mapIO(physicalAddress, size));
+    };
+
+    void NvmeController::setAdminQueueRegisters(uint64_t submission, uint64_t completion) {
+        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ASQ/sizeof(uint64_t)] = submission;
+        reinterpret_cast<uint64_t*>(crBaseAddress)[ControllerRegister::ACQ/sizeof(uint64_t)] = completion;
     };
 
     uint32_t NvmeController::getQueueDoorbellOffset(const uint32_t y, const uint8_t completionQueue) {

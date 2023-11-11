@@ -23,6 +23,9 @@ namespace Device::Storage {
          * Constructor
         */
         explicit NvmeQueue(NvmeController* nvmeController, uint16_t id, uint32_t size);
+
+        uint64_t getSubmissionPhysicalAddress() { return subQueuePhysicalPointer; };
+        uint64_t getCompletionPhysicalAddress() { return compQueuePhysicalPointer; };
         
         private:
         static Kernel::Logger log;
@@ -74,9 +77,11 @@ namespace Device::Storage {
 
         uint32_t subQueueTail;
         NvmeCommand* subQueue;
+        uint64_t subQueuePhysicalPointer;
 
         uint32_t compQueueHead;
         NvmeCompletionEntry* compQueue;
+        uint64_t compQueuePhysicalPointer;
 
 
     };

@@ -31,7 +31,7 @@ namespace Device::Storage {
 
         private:
         NvmeController* nvme;
-        NvmeQueue queue;
+        NvmeQueue* queue;
 
         // Identification for submission and completion queue. Always 0 for admin
         uint16_t id = 0;

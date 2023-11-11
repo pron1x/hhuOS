@@ -19,7 +19,10 @@ Kernel::Logger NvmeQueue::log = Kernel::Logger::get("NVMEQueue");
 
         // Allocate memory for submission and completion queue
         subQueue = reinterpret_cast<NvmeCommand*>(memoryService.mapIO(size * sizeof(NvmeCommand)));
+        subQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(subQueue));
+
         compQueue = reinterpret_cast<NvmeCompletionEntry*>(memoryService.mapIO(size * sizeof(NvmeCompletionEntry)));
+        compQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(compQueue));
 
         log.info("Initialized Queue %d with size %d.", id, size);
     };

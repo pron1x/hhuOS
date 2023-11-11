@@ -32,6 +32,8 @@ namespace Device::Storage {
 
         static void initializeAvailableControllers();
 
+        void setAdminQueueRegisters(uint64_t submission, uint64_t completion);
+
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;
