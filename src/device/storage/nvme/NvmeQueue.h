@@ -22,12 +22,7 @@ namespace Device::Storage {
         /**
          * Constructor
         */
-       explicit NvmeQueue(const NvmeController* nvmeController);
-
-       /**
-        * Destructor
-       */
-        ~NvmeQueue();
+       explicit NvmeQueue(NvmeController* nvmeController, uint16_t id, uint32_t size);
         
         private:
         static Kernel::Logger log;
@@ -57,8 +52,8 @@ namespace Device::Storage {
             uint32_t DW0;           // Command specific
             uint32_t _reserved0;    
             struct {
-                uint16_t SQHD;      // SQ Head Pointer
-                uint16_t SQID;      // SQ Identifier
+                uint16_t SQHD;      // Submission Queue Head Pointer
+                uint16_t SQID;      // Submission Queue Identifier
             } DW2;                  // Submission Queue Information
             struct {
                 unsigned CID    : 16;   // Command Identifier
@@ -70,6 +65,7 @@ namespace Device::Storage {
         public:
 
         private:
+        NvmeController* nvme;
 
         // Identification for submission and completion queue.
         uint16_t id;

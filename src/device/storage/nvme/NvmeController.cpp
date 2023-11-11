@@ -152,6 +152,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
 
         // FIXME: Will be implemented using NvmeQueue
+        NvmeQueue adminQueue = NvmeQueue(this, 0, 2);
         void* aSubQueueVirtual = memoryService.mapIO(NVME_QUEUE_ENTRIES * 64);
         void* aSubQueuePhysical = memoryService.getPhysicalAddress(aSubQueueVirtual);
         
