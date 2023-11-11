@@ -22,7 +22,7 @@ namespace Device::Storage {
         /**
          * Constructor
         */
-       explicit NvmeQueue(NvmeController* nvmeController, uint16_t id, uint32_t size);
+        explicit NvmeQueue(NvmeController* nvmeController, uint16_t id, uint32_t size);
         
         private:
         static Kernel::Logger log;
