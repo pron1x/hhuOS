@@ -181,6 +181,12 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
         conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         log.info("NVMe Controller configured. (RDY: %x Enabled: %x)", status.bits.RDY, conf.bits.EN);
+
+        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
+        auto controllerInfo = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
+        adminQueue.identifyController(memoryService.getPhysicalAddress(controllerInfo));
+        Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(50));
+        log.info("VID: %x, SSVID: %x", controllerInfo[0], controllerInfo[1]);
     }
 
     void NvmeController::initializeAvailableControllers() {

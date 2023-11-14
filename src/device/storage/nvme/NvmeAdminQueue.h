@@ -22,14 +22,16 @@ namespace Device::Storage {
         public:
         
         void Init(NvmeController* nvmeController, uint32_t size);
+
+        void identifyController(void* physicalDataPtr);
         
         private:
-        static Kernel::Logger log;
 
         
         public:
 
         private:
+        static Kernel::Logger log;
         NvmeController* nvme;
         NvmeQueue* queue;
 
