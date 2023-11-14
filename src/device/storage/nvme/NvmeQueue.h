@@ -30,6 +30,7 @@ namespace Device::Storage {
         private:
         static Kernel::Logger log;
 
+        public:
         struct NvmeCommand {
             struct {
                 uint8_t OPC;                // Opcode
@@ -41,8 +42,8 @@ namespace Device::Storage {
             uint64_t NSID;          // Namespace Identifier
             uint64_t _reserved1;
             uint64_t MPTR;          // Metadata Pointer
-            uint64_t PRP1;          // PRP Entry 1
-            uint64_t PRP2;          // PRP Entry 2 or reserved
+            uint64_t PRP1;          // Data Pointer (DPTR), PRP Entry 1
+            uint64_t PRP2;          // Data Pointer (DPTR), PRP Entry 2 or reserved
             uint32_t CDW10;         // Command specific
             uint32_t CDW11;         // Command specific
             uint32_t CDW12;         // Command specific
@@ -65,7 +66,9 @@ namespace Device::Storage {
             } DW3;                  // Command information
         };
 
-        public:
+        NvmeCommand* getSubmissionEntry();
+
+        void updateSubmissionTail();
 
         private:
         NvmeController* nvme;

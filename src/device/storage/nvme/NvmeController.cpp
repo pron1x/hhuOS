@@ -190,6 +190,11 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         }
     }
 
+    void NvmeController::setQueueTail(uint32_t id, uint32_t entry) {
+        log.info("Setting Completion Queue[%d] Doorebell to %d", id, entry);
+        crBaseAddress[getQueueDoorbellOffset(id, 0)] = entry;
+    }
+
     void NvmeController::plugin() {
 
     }

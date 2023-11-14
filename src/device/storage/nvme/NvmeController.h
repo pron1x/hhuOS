@@ -34,6 +34,8 @@ namespace Device::Storage {
 
         void setAdminQueueRegisters(uint64_t submission, uint64_t completion);
 
+        void setQueueTail(uint32_t id, uint32_t entry);
+
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;

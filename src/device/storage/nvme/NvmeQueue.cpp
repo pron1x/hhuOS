@@ -12,19 +12,29 @@ Kernel::Logger NvmeQueue::log = Kernel::Logger::get("NVMEQueue");
         nvme = nvmeController;
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
 
-        id = id;
-        size = size;
-        compQueueHead = 0;
-        subQueueTail = 0;
+        this->id = id;
+        this->size = size;
+        this->compQueueHead = 0;
+        this->subQueueTail = 0;
 
         // Allocate memory for submission and completion queue
-        subQueue = reinterpret_cast<NvmeCommand*>(memoryService.mapIO(size * sizeof(NvmeCommand)));
-        subQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(subQueue));
+        this->subQueue = reinterpret_cast<NvmeCommand*>(memoryService.mapIO(size * sizeof(NvmeCommand)));
+        this->subQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(subQueue));
 
-        compQueue = reinterpret_cast<NvmeCompletionEntry*>(memoryService.mapIO(size * sizeof(NvmeCompletionEntry)));
-        compQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(compQueue));
+        this->compQueue = reinterpret_cast<NvmeCompletionEntry*>(memoryService.mapIO(size * sizeof(NvmeCompletionEntry)));
+        this->compQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(compQueue));
 
         log.info("Initialized Queue %d with size %d.", id, size);
     };
 
+    NvmeQueue::NvmeCommand* NvmeQueue::getSubmissionEntry() {
+        auto ptr = &subQueue[subQueueTail];
+        subQueueTail = (subQueueTail + 1) % size;
+        return ptr;
+    }
+
+    void NvmeQueue::updateSubmissionTail() {
+        log.info("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
+        nvme->setQueueTail(id, subQueueTail);
+    }
 }
