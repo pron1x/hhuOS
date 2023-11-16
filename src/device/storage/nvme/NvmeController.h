@@ -7,6 +7,15 @@
 #include "kernel/interrupt/InterruptHandler.h"
 #include "device/pci/PciDevice.h"
 
+#include "device/storage/nvme/NvmeAdminQueue.h"
+namespace Device::Storage {
+    class NvmeController;
+    namespace Nvme {
+        class NvmeAdminQueue;
+        class NvmeQueue;
+    }
+}
+
 namespace Device::Storage {
     
     class NvmeController : public Kernel::InterruptHandler {
@@ -32,6 +41,8 @@ namespace Device::Storage {
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;
+
+        Nvme::NvmeAdminQueue adminQueue;
         
         private:
 

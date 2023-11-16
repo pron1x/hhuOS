@@ -1,9 +1,13 @@
 #include "NvmeController.h"
 #include "NvmeAdminQueue.h"
+#include "NvmeQueue.h"
 
 #include "kernel/log/Logger.h"
 #include "kernel/system/System.h"
 #include "kernel/service/MemoryService.h"
+#include "kernel/service/InterruptService.h"
+#include "kernel/interrupt/InterruptVector.h"
+
 #include "device/pci/Pci.h"
 #include "device/pci/PciDevice.h"
 
@@ -150,7 +154,7 @@ namespace Device::Storage {
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
 
         // Initializes and configures both Admin Queue registers
-        Nvme::NvmeAdminQueue adminQueue = Nvme::NvmeAdminQueue();
+        adminQueue = Nvme::NvmeAdminQueue();
         adminQueue.Init(this, NVME_QUEUE_ENTRIES);
         
       
@@ -181,18 +185,19 @@ namespace Device::Storage {
         status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
         conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         log.info("NVMe Controller configured. (RDY: %x Enabled: %x)", status.bits.RDY, conf.bits.EN);
-
+/*
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
         auto controllerInfo = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
         adminQueue.identifyController(memoryService.getPhysicalAddress(controllerInfo));
         Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(50));
-        log.info("VID: %x, SSVID: %x", controllerInfo[0], controllerInfo[1]);
+        log.info("VID: %x, SSVID: %x", controllerInfo[0], controllerInfo[1]);*/
     }
 
     void NvmeController::initializeAvailableControllers() {
         auto devices = Pci::search(Pci::Class::MASS_STORAGE, 0x08);
         for (const auto &device : devices) {
             auto *controller = new NvmeController(device);
+            controller->plugin();
         }
     }
 
@@ -202,12 +207,20 @@ namespace Device::Storage {
     }
 
     void NvmeController::plugin() {
-
+        auto &interruptService = Kernel::System::getService<Kernel::InterruptService>();
+        interruptService.assignInterrupt(Kernel::InterruptVector::FREE3, *this);
+        interruptService.forbidHardwareInterrupt(static_cast<Device::InterruptRequest>(11));
+        
+        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
+        auto controllerInfo = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
+        this->adminQueue.identifyController(memoryService.getPhysicalAddress(controllerInfo));
     }
 
     // Pin based interrupts, use Interrupt Mask Sets!
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
-
+        log.info("Interrupt received innit! %x", frame.interrupt);
+        log.info("Interrutp Mask: %x", crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)]);
+        crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)] = 0xFFFFFFFF;
     }
 
     void NvmeController::mapBaseAddressRegister(const PciDevice &pciDevice) {

@@ -1,6 +1,6 @@
-#include "NvmeQueue.h"
-#include "NvmeAdminQueue.h"
 #include "NvmeController.h"
+#include "NvmeAdminQueue.h"
+#include "NvmeQueue.h"
 
 #include "kernel/log/Logger.h"
 #include "kernel/service/MemoryService.h"

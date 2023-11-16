@@ -6,6 +6,14 @@
 #include <cstdint>
 
 namespace Device::Storage {
+    class NvmeController;
+    namespace Nvme {
+        class NvmeAdminQueue;
+        class NvmeQueue;
+    }
+}
+
+namespace Device::Storage {
     namespace Nvme {
     class NvmeAdminQueue {
         public:
