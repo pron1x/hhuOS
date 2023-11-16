@@ -11,7 +11,7 @@
 #include "lib/util/time/Timestamp.h"
 
 namespace Device::Storage {
-Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
+    Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
     NvmeController::NvmeController(const PciDevice &pciDevice) {
         log.info("Initializing controller [0x%04x:0x%04x]", pciDevice.getVendorId(), pciDevice.getDeviceId());
@@ -150,7 +150,7 @@ Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
         log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
 
         // Initializes and configures both Admin Queue registers
-        NvmeAdminQueue adminQueue = NvmeAdminQueue();
+        Nvme::NvmeAdminQueue adminQueue = Nvme::NvmeAdminQueue();
         adminQueue.Init(this, NVME_QUEUE_ENTRIES);
         
       

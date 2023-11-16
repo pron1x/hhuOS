@@ -3,37 +3,30 @@
 
 #include <cstdint>
 
+#include "kernel/log/Logger.h"
 #include "kernel/interrupt/InterruptHandler.h"
-
-namespace Device {
-    class PciDevice;
-    namespace Storage {
-        class NvmeDevice;
-    }
-}
-namespace Kernel {
-    class Logger;
-    struct InterruptFrame;
-}
+#include "device/pci/PciDevice.h"
 
 namespace Device::Storage {
     
     class NvmeController : public Kernel::InterruptHandler {
         public:
-        /**
-         * Constructor
-        */
-       explicit NvmeController(const PciDevice &pciDevice);
 
-       /**
-        * Destructor
-       */
+        explicit NvmeController(const PciDevice &pciDevice);
+
         ~NvmeController() override = default;
 
         static void initializeAvailableControllers();
 
+        /** Sets the Admin Queue Registers Base Addresses for Submission and Completion Queues*/
         void setAdminQueueRegisters(uint64_t submission, uint64_t completion);
 
+        /**
+         * Updates the Tail Doorbell Register for the specified queue to the new entry
+         * @param id Queue id for which to update the tail register
+         * @param completion If the queue is a completion queue or not
+         * TODO: Update function name to be more precise (completion queues use head doorbell register) 
+        */
         void setQueueTail(uint32_t id, uint32_t entry);
 
         void plugin() override;
@@ -41,6 +34,7 @@ namespace Device::Storage {
         void trigger(const Kernel::InterruptFrame &frame) override;
         
         private:
+
         static Kernel::Logger log;
         /**
          * hhuOS is 32bit, if access to 64 bit registerscis required, cast to 64bit pointer.
@@ -58,6 +52,9 @@ namespace Device::Storage {
          * @param completionQueue 0 for submission, 1 for completion
         */
         uint32_t getQueueDoorbellOffset(const uint32_t y, const uint8_t completionQueue);
+        
+
+        // Enums / Structs for NVMe Controllers
 
         enum ControllerRegister : uint32_t {
             LCAP    = 0x0,      // Lower Controller Capabilities, 32bit

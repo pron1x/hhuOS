@@ -7,7 +7,8 @@
 #include "kernel/system/System.h"
 
 namespace Device::Storage {
-Kernel::Logger NvmeAdminQueue::log = Kernel::Logger::get("NVMEAdmin");
+    namespace Nvme {
+    Kernel::Logger NvmeAdminQueue::log = Kernel::Logger::get("NVMEAdmin");
 
     void NvmeAdminQueue::Init(NvmeController* nvmeController, uint32_t size) {
         id = 0;
@@ -32,5 +33,5 @@ Kernel::Logger NvmeAdminQueue::log = Kernel::Logger::get("NVMEAdmin");
         submissionEntry->CDW14 = 0;
         queue->updateSubmissionTail();
     };
-
+    }
 }

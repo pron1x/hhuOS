@@ -5,19 +5,8 @@
 #include "NvmeQueue.h"
 #include <cstdint>
 
-namespace Device {
-    class PciDevice;
-    namespace Storage {
-        class NvmeAdminQueue;
-    }
-}
-namespace Kernel {
-    class Logger;
-    struct InterruptFrame;
-}
-
 namespace Device::Storage {
-    
+    namespace Nvme {
     class NvmeAdminQueue {
         public:
         
@@ -41,6 +30,7 @@ namespace Device::Storage {
         uint32_t size;
 
     };
+    }
 }
 
 

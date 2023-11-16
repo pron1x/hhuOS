@@ -4,24 +4,14 @@
 #include "NvmeController.h"
 #include <cstdint>
 
-namespace Device {
-    class PciDevice;
-    namespace Storage {
-        class NvmeQueue;
-    }
-}
-namespace Kernel {
-    class Logger;
-    struct InterruptFrame;
-}
 
 namespace Device::Storage {
     
+    namespace Nvme{
+
     class NvmeQueue {
         public:
-        /**
-         * Constructor
-        */
+        
         explicit NvmeQueue(NvmeController* nvmeController, uint16_t id, uint32_t size);
 
         uint64_t getSubmissionPhysicalAddress() { return subQueuePhysicalPointer; };
@@ -88,6 +78,7 @@ namespace Device::Storage {
 
 
     };
+    }
 }
 
 

@@ -6,7 +6,8 @@
 #include "kernel/system/System.h"
 
 namespace Device::Storage {
-Kernel::Logger NvmeQueue::log = Kernel::Logger::get("NVMEQueue");
+    namespace Nvme {
+    Kernel::Logger NvmeQueue::log = Kernel::Logger::get("NVMEQueue");
 
     NvmeQueue::NvmeQueue(NvmeController* nvmeController, uint16_t id, uint32_t size) {
         nvme = nvmeController;
@@ -36,5 +37,6 @@ Kernel::Logger NvmeQueue::log = Kernel::Logger::get("NVMEQueue");
     void NvmeQueue::updateSubmissionTail() {
         log.info("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
         nvme->setQueueTail(id, subQueueTail);
+    }
     }
 }
