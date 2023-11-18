@@ -23,9 +23,9 @@ namespace Device::Storage {
 
         uint64_t getSubmissionPhysicalAddress() { return subQueuePhysicalPointer; };
         uint64_t getCompletionPhysicalAddress() { return compQueuePhysicalPointer; };
-        
-        private:
-        static Kernel::Logger log;
+
+        void checkCompletionQueue();
+
 
         public:
         struct NvmeCommand {
@@ -68,9 +68,10 @@ namespace Device::Storage {
         void updateSubmissionTail();
 
         private:
+        static Kernel::Logger log;
         NvmeController* nvme;
 
-        // Identification for submission and completion queue.
+        // Identification for submission and completion queue
         uint16_t id;
         // Submission and completion queue size
         uint32_t size;
@@ -83,6 +84,8 @@ namespace Device::Storage {
         NvmeCompletionEntry* compQueue;
         uint64_t compQueuePhysicalPointer;
 
+        // Phase bit for new completion queue entries
+        uint8_t phase = 1;
 
     };
     }

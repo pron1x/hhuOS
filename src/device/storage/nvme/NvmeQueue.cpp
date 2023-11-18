@@ -38,5 +38,18 @@ namespace Device::Storage {
         log.info("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
         nvme->setQueueTail(id, subQueueTail);
     }
+
+    void NvmeQueue::checkCompletionQueue() {
+        // Loop through all new entries in completion queue, indicated by phase bit
+        while(compQueue[compQueueHead].DW3.P == phase) {
+            log.info("Status field for command[%d]: %x", compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
+            if(compQueueHead + 1 == size) {
+                // Phase bit toggles every wrap around!
+                phase = (phase + 1) % 2;
+            }
+            compQueueHead = (compQueueHead + 1) % size;
+        }
+        nvme->setQueueHead(id, compQueueHead);
+    }
     }
 }

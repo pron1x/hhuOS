@@ -8,6 +8,8 @@
 #include "device/pci/PciDevice.h"
 
 #include "device/storage/nvme/NvmeAdminQueue.h"
+
+#include "lib/util/collection/ArrayList.h"
 namespace Device::Storage {
     class NvmeController;
     namespace Nvme {
@@ -33,10 +35,24 @@ namespace Device::Storage {
         /**
          * Updates the Tail Doorbell Register for the specified queue to the new entry
          * @param id Queue id for which to update the tail register
-         * @param completion If the queue is a completion queue or not
-         * TODO: Update function name to be more precise (completion queues use head doorbell register) 
+         * @param entry Entry to write into the Tail Doorbell Register
+         * TODO: Update function name to be more precise (Submission queues use tail doorbell register)
         */
         void setQueueTail(uint32_t id, uint32_t entry);
+
+        /**
+         * Updates the Head Doorbell Register for the specified queue to the new entry
+         * @param id Queue id for which to update the tail register
+         * @param entry Entry to write into the Head Doorbell Register
+        */
+        void setQueueHead(uint32_t id, uint32_t entry);
+
+        /**
+         * Registers a queue object to be called when the controller receives an interrupt
+         * @param id Id of the queue
+         * @param queue The queue object which will be called to check it's completion entries
+        */
+        void registerQueueInterruptHandler(uint32_t id, Nvme::NvmeQueue* queue);
 
         void plugin() override;
 
@@ -47,6 +63,10 @@ namespace Device::Storage {
         private:
 
         static Kernel::Logger log;
+        const Device::PciDevice* pci;
+
+        Util::ArrayList<Nvme::NvmeQueue*> queues;
+
         /**
          * hhuOS is 32bit, if access to 64 bit registerscis required, cast to 64bit pointer.
         */
@@ -54,6 +74,8 @@ namespace Device::Storage {
         uint32_t doorbellStride;
         uint32_t timeout;
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
+
+        uint8_t* test;
 
         void mapBaseAddressRegister(const PciDevice &pciDevice);
 

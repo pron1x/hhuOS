@@ -19,6 +19,7 @@ namespace Device::Storage {
 
     NvmeController::NvmeController(const PciDevice &pciDevice) {
         log.info("Initializing controller [0x%04x:0x%04x]", pciDevice.getVendorId(), pciDevice.getDeviceId());
+        pci = &pciDevice;
 
         //Enable Bus Master DMA and Memory Space Access
         uint16_t command = pciDevice.readWord(Pci::COMMAND);
@@ -202,18 +203,27 @@ namespace Device::Storage {
     }
 
     void NvmeController::setQueueTail(uint32_t id, uint32_t entry) {
-        log.info("Setting Completion Queue[%d] Doorebell to %d", id, entry);
+        log.info("Setting Queue[%d] Tail Doorebell to %d", id, entry);
         crBaseAddress[getQueueDoorbellOffset(id, 0)] = entry;
+    }
+
+    void NvmeController::setQueueHead(uint32_t id, uint32_t entry) {
+        log.info("Setting Queue[%d] Head Doorbell to %d", id, entry);
+        crBaseAddress[getQueueDoorbellOffset(id, 1)] = entry;
+    }
+
+    void NvmeController::registerQueueInterruptHandler(uint32_t id, Nvme::NvmeQueue* queue) {
+        queues.add(queue);
     }
 
     void NvmeController::plugin() {
         auto &interruptService = Kernel::System::getService<Kernel::InterruptService>();
         interruptService.assignInterrupt(Kernel::InterruptVector::FREE3, *this);
-        interruptService.forbidHardwareInterrupt(static_cast<Device::InterruptRequest>(11));
+        interruptService.allowHardwareInterrupt(pci->getInterruptLine());
         
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
-        auto controllerInfo = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
-        this->adminQueue.identifyController(memoryService.getPhysicalAddress(controllerInfo));
+        test = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
+        this->adminQueue.identifyController(memoryService.getPhysicalAddress(test));
     }
 
     // Pin based interrupts, use Interrupt Mask Sets!
@@ -221,6 +231,11 @@ namespace Device::Storage {
         log.info("Interrupt received innit! %x", frame.interrupt);
         log.info("Interrutp Mask: %x", crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)]);
         crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)] = 0xFFFFFFFF;
+        for(Nvme::NvmeQueue* queue : queues) {
+            queue->checkCompletionQueue();
+        }
+        log.info("VID: %x, SSVID: %x, MDTS: %x", reinterpret_cast<uint16_t*>(test)[0], reinterpret_cast<uint16_t*>(test)[1], test[77]);
+        //crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)] = 0xFFFFFFFF;
     }
 
     void NvmeController::mapBaseAddressRegister(const PciDevice &pciDevice) {
