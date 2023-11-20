@@ -30,13 +30,13 @@ namespace Device::Storage {
         public:
         struct NvmeCommand {
             struct {
-                uint8_t OPC;                // Opcode
+                unsigned OPC        : 8;    // Opcode
                 unsigned FUSE       : 2;    // Fused Operation
                 unsigned _reserved0 : 4;
                 unsigned PSDT       : 2;    // PRP or SGL for Data Transfer (Only PRP supported)
                 unsigned CID        : 16;   // Command Identifier
             } CDW0;     // Command information
-            uint64_t NSID;          // Namespace Identifier
+            uint32_t NSID;          // Namespace Identifier
             uint64_t _reserved1;
             uint64_t MPTR;          // Metadata Pointer
             uint64_t PRP1;          // Data Pointer (DPTR), PRP Entry 1
