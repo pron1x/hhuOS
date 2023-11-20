@@ -222,20 +222,21 @@ namespace Device::Storage {
         interruptService.allowHardwareInterrupt(pci->getInterruptLine());
         
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
-        test = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
+        uint8_t* test = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
         this->adminQueue.identifyController(memoryService.getPhysicalAddress(test));
+        log.info("VID: %x, SSVID: %x, MDTS: %x", reinterpret_cast<uint16_t*>(test)[0], reinterpret_cast<uint16_t*>(test)[1], test[77]);
     }
 
     // Pin based interrupts, use Interrupt Mask Sets!
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
         log.info("Interrupt received innit! %x", frame.interrupt);
-        log.info("Interrutp Mask: %x", crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)]);
-        crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)] = 0xFFFFFFFF;
+        crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)] = 0x1;
         for(Nvme::NvmeQueue* queue : queues) {
             queue->checkCompletionQueue();
         }
-        log.info("VID: %x, SSVID: %x, MDTS: %x", reinterpret_cast<uint16_t*>(test)[0], reinterpret_cast<uint16_t*>(test)[1], test[77]);
-        //crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)] = 0xFFFFFFFF;
+        log.info("INTMS: %x", crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)]);
+        log.info("INTMC: %x", crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)]);
+        //crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)] = 0x1;
     }
 
     void NvmeController::mapBaseAddressRegister(const PciDevice &pciDevice) {

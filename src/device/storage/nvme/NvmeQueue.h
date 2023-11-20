@@ -23,9 +23,11 @@ namespace Device::Storage {
 
         uint64_t getSubmissionPhysicalAddress() { return subQueuePhysicalPointer; };
         uint64_t getCompletionPhysicalAddress() { return compQueuePhysicalPointer; };
+        uint32_t getSubmissionSlotNumber() { return subQueueTail; }
 
         void checkCompletionQueue();
 
+        void waitUntilComplete() { while (waiting) {}; }
 
         public:
         struct NvmeCommand {
@@ -86,6 +88,7 @@ namespace Device::Storage {
 
         // Phase bit for new completion queue entries
         uint8_t phase = 1;
+        volatile bool waiting = false;
 
     };
     }

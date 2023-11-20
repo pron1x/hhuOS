@@ -75,8 +75,6 @@ namespace Device::Storage {
         uint32_t timeout;
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
 
-        uint8_t* test;
-
         void mapBaseAddressRegister(const PciDevice &pciDevice);
 
         /**

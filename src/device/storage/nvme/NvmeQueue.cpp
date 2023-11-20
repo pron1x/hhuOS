@@ -36,6 +36,7 @@ namespace Device::Storage {
 
     void NvmeQueue::updateSubmissionTail() {
         log.info("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
+        waiting = true;
         nvme->setQueueTail(id, subQueueTail);
     }
 
@@ -50,6 +51,7 @@ namespace Device::Storage {
             compQueueHead = (compQueueHead + 1) % size;
         }
         nvme->setQueueHead(id, compQueueHead);
+        waiting = false;
     }
     }
 }
