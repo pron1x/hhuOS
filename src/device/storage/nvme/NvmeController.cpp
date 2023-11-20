@@ -38,8 +38,6 @@ namespace Device::Storage {
 
         /**
          * Due to hhuOS being 32bit, we split the Capabilities into lower and upper part.
-         * TODO: Try and turn Capabilities into Union/Struct.
-         * Due to the 32bit limitation, 2 structs will be needed.
         */
 
         lControllerCapabilities lcap = {};
@@ -65,7 +63,7 @@ namespace Device::Storage {
          * Doorbell Stride is used to calculate Submission/Completion Queue Offsets
         */
 
-        doorbellStride = 1 << (2 + ucap.bits.DSTRD);
+        doorbellStride = ucap.bits.DSTRD;
 
         log.info("Max Queue Entries supported: %d", maxQueueEnties);
         log.info("Command sets supported. NVM command set %d, Admin only: %d. Bits: %x", nvmCommand, adminCommand, ucap.bits.CSS);
@@ -98,10 +96,8 @@ namespace Device::Storage {
          * Controller reset: disable, configure and reenable controller
         */
 
-        /**
-         * Check if controller needs reset: Ready or Fatal State
-        */
-
+        
+        //Check if controller needs reset: Ready or Fatal State
         if(status.bits.RDY || status.bits.CFS) {
             log.info("Controller needs to be reset.");
             if(status.bits.CFS) log.warn("Controller in fatal state.");
@@ -216,6 +212,14 @@ namespace Device::Storage {
         queues.add(queue);
     }
 
+    void NvmeController::setInterruptMask(uint32_t queueId) {
+        crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)] = 1 << queueId;
+    }
+
+    void NvmeController::clearInterruptMask(uint32_t queueId) {
+        crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)] = 1 << queueId;
+    }
+
     void NvmeController::plugin() {
         auto &interruptService = Kernel::System::getService<Kernel::InterruptService>();
         interruptService.assignInterrupt(Kernel::InterruptVector::FREE3, *this);
@@ -230,13 +234,9 @@ namespace Device::Storage {
     // Pin based interrupts, use Interrupt Mask Sets!
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
         log.info("Interrupt received innit! %x", frame.interrupt);
-        crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)] = 0x1;
         for(Nvme::NvmeQueue* queue : queues) {
             queue->checkCompletionQueue();
         }
-        log.info("INTMS: %x", crBaseAddress[ControllerRegister::INTMS / sizeof(uint32_t)]);
-        log.info("INTMC: %x", crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)]);
-        //crBaseAddress[ControllerRegister::INTMC / sizeof(uint32_t)] = 0x1;
     }
 
     void NvmeController::mapBaseAddressRegister(const PciDevice &pciDevice) {

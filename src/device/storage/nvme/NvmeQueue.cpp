@@ -25,6 +25,11 @@ namespace Device::Storage {
         this->compQueue = reinterpret_cast<NvmeCompletionEntry*>(memoryService.mapIO(size * sizeof(NvmeCompletionEntry)));
         this->compQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(compQueue));
 
+        // Initialize Phase Bit to
+        for(int i = 0; i < size; i++) {
+            compQueue[i].DW3.P = 0;
+        }
+
         log.info("Initialized Queue %d with size %d.", id, size);
     };
 
@@ -41,6 +46,8 @@ namespace Device::Storage {
     }
 
     void NvmeQueue::checkCompletionQueue() {
+        // Set Interrupt Mask for this queue
+        nvme->setInterruptMask(id);
         // Loop through all new entries in completion queue, indicated by phase bit
         while(compQueue[compQueueHead].DW3.P == phase) {
             log.info("Status field for command[%d]: %x", compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
@@ -51,6 +58,7 @@ namespace Device::Storage {
             compQueueHead = (compQueueHead + 1) % size;
         }
         nvme->setQueueHead(id, compQueueHead);
+        nvme->clearInterruptMask(id);
         waiting = false;
     }
     }

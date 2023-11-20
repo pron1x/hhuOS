@@ -54,6 +54,10 @@ namespace Device::Storage {
         */
         void registerQueueInterruptHandler(uint32_t id, Nvme::NvmeQueue* queue);
 
+        void setInterruptMask(uint32_t queueId);
+
+        void clearInterruptMask(uint32_t queueId);
+
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;
