@@ -26,7 +26,7 @@ namespace Device::Storage {
         this->compQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(compQueue));
 
         // Initialize Phase Bit to
-        for(int i = 0; i < size; i++) {
+        for(uint32_t i = 0; i < size; i++) {
             compQueue[i].DW3.P = 0;
         }
 

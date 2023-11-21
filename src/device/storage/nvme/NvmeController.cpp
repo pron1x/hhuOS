@@ -28,6 +28,7 @@ namespace Device::Storage {
 
         mapBaseAddressRegister(pciDevice);
 
+        // TODO: Introduce check for controller version? (Entry sizes could change)
         uint32_t mjr, mnr, ter, ver;
         ver = crBaseAddress[ControllerRegister::VS/sizeof(uint32_t)];
         mjr = (ver >> 16) & 0xFFFF;
@@ -50,10 +51,11 @@ namespace Device::Storage {
                 lcap.bits.MQES, lcap.bits.CQR, lcap.bits.AMS, lcap.bits.TO, ucap.bits.DSTRD, ucap.bits.NSSRS, ucap.bits.CSS, 
                 ucap.bits.BPS, ucap.bits.MPSMIN, ucap.bits.MPSMAX, ucap.bits.PMRS, ucap.bits.CMBS);
 
-        uint16_t maxQueueEnties = lcap.bits.MQES;
+        maxQueueEnties = lcap.bits.MQES;
 
         /**
          * Controller needs to support NVM command subset
+         * 
         */
        
         uint8_t nvmCommand = (ucap.bits.CSS >> 0) & 0x1;
@@ -66,24 +68,23 @@ namespace Device::Storage {
         doorbellStride = ucap.bits.DSTRD;
 
         log.info("Max Queue Entries supported: %d", maxQueueEnties);
-        log.info("Command sets supported. NVM command set %d, Admin only: %d. Bits: %x", nvmCommand, adminCommand, ucap.bits.CSS);
         log.info("Doorbell Stride: %d", doorbellStride);
-
+        if(nvmCommand == 0) {
+            log.warn("No I/O Command Set supported! [NVM: %x | Admin: %x]", nvmCommand, adminCommand);
+        }
 
         /**
          * hhuOS has 4kB aligned, if minPageSize is > 4kB Controller can't be initialized. 
          * This shouldn't happen with V1.4 controllers
         */
-
-        uint32_t minPageSize = 1 << (12 + ucap.bits.MPSMIN);
-        uint32_t maxPageSize = 1 << (12 + ucap.bits.MPSMAX);
+        minPageSize = 1 << (12 + ucap.bits.MPSMIN);
+        maxPageSize = 1 << (12 + ucap.bits.MPSMAX);
         log.info("Min page size: %d, Max page size: %d", minPageSize, maxPageSize);
 
         /**
          * Worst case wait time for CC.RDY to flip after CC.EN flips.
          * The field is in 500ms units so we multiply by 500.
         */
-
         timeout = lcap.bits.TO * 500;
         log.info("Worst case timeout: %dms", timeout);
 
@@ -96,7 +97,6 @@ namespace Device::Storage {
          * Controller reset: disable, configure and reenable controller
         */
 
-        
         //Check if controller needs reset: Ready or Fatal State
         if(status.bits.RDY || status.bits.CFS) {
             log.info("Controller needs to be reset.");
@@ -143,18 +143,14 @@ namespace Device::Storage {
         log.info("Configuring controller admin queue.");
         /**
          * Controller is ready to be configured. Refer to 7.6.1 Initialization.
-         * Create Admin Submission and Admin Completion Queue Memory, write it in controller register.
-         * TODO: Tail and Headdoorbells point at queue entries, create as pointers to queue entries.
         */
 
         crBaseAddress[ControllerRegister::AQA/sizeof(uint32_t)] = ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES); // Set Queue Size
-        log.info("AQA: %x", ((NVME_QUEUE_ENTRIES << 16) + NVME_QUEUE_ENTRIES));
 
         // Initializes and configures both Admin Queue registers
         adminQueue = Nvme::NvmeAdminQueue();
         adminQueue.Init(this, NVME_QUEUE_ENTRIES);
-        
-      
+
         /**
          * Write Controller Configuration to select arbitration mechanism, memory page size and command set
         */
@@ -171,9 +167,7 @@ namespace Device::Storage {
         conf.bits.EN = 1;
         crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)] = conf.cc;
         
-        status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
-        conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
-        
+        status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];        
         // Wait for RDY to be 1
         if(status.bits.RDY == 0) {
             Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
@@ -182,12 +176,22 @@ namespace Device::Storage {
         status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
         conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         log.info("NVMe Controller configured. (RDY: %x Enabled: %x)", status.bits.RDY, conf.bits.EN);
-/*
+    }
+
+    void NvmeController::initialize() {
+        // Send identify Command
+        // Record max transfer size (+ other stuff?)
+        // Search + attach namespaces (aka drives)
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
-        auto controllerInfo = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
-        adminQueue.identifyController(memoryService.getPhysicalAddress(controllerInfo));
-        Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(50));
-        log.info("VID: %x, SSVID: %x", controllerInfo[0], controllerInfo[1]);*/
+        uint8_t* info = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
+        this->adminQueue.identifyController(memoryService.getPhysicalAddress(info));
+        uint8_t type = info[111];
+        if(type != 0x1) {
+            log.warn("Controller is not an I/O Controller!");
+        }
+        maxDataTransfer = (1 << info[77]) * minPageSize;
+
+        memoryService.freeUserMemory(info);
     }
 
     void NvmeController::initializeAvailableControllers() {
@@ -195,6 +199,7 @@ namespace Device::Storage {
         for (const auto &device : devices) {
             auto *controller = new NvmeController(device);
             controller->plugin();
+            controller->initialize();
         }
     }
 
@@ -224,14 +229,8 @@ namespace Device::Storage {
         auto &interruptService = Kernel::System::getService<Kernel::InterruptService>();
         interruptService.assignInterrupt(Kernel::InterruptVector::FREE3, *this);
         interruptService.allowHardwareInterrupt(pci->getInterruptLine());
-        
-        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
-        uint8_t* test = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
-        this->adminQueue.identifyController(memoryService.getPhysicalAddress(test));
-        log.info("VID: %x, SSVID: %x, MDTS: %x", reinterpret_cast<uint16_t*>(test)[0], reinterpret_cast<uint16_t*>(test)[1], test[77]);
     }
 
-    // Pin based interrupts, use Interrupt Mask Sets!
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
         log.info("Interrupt received innit! %x", frame.interrupt);
         for(Nvme::NvmeQueue* queue : queues) {

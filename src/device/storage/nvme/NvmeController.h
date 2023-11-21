@@ -29,6 +29,8 @@ namespace Device::Storage {
 
         static void initializeAvailableControllers();
 
+        void initialize();
+
         /** Sets the Admin Queue Registers Base Addresses for Submission and Completion Queues*/
         void setAdminQueueRegisters(uint64_t submission, uint64_t completion);
 
@@ -77,6 +79,11 @@ namespace Device::Storage {
         uint32_t* crBaseAddress;
         uint32_t doorbellStride;
         uint32_t timeout;
+        uint16_t maxQueueEnties;
+        uint32_t minPageSize;
+        uint32_t maxPageSize;
+        uint32_t maxDataTransfer;
+
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
 
         void mapBaseAddressRegister(const PciDevice &pciDevice);
