@@ -250,7 +250,7 @@ namespace Device::Storage {
 
         // Get physical address from BAR0 + BAR1;
         uint32_t bar1 = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_1);
-        uint64_t physicalAddress = ((bar0 & 0xFFFFFFF0) + ((bar1 &0xFFFFFFFF) << 32));
+        uint64_t physicalAddress = ((uint64_t)(bar0 & 0xFFFFFFF0) + ((uint64_t)(bar1 &0xFFFFFFFF) << 32));
 
         // Map physical address to memory
         crBaseAddress = reinterpret_cast<uint32_t*>(memoryService.mapIO(physicalAddress, size));
