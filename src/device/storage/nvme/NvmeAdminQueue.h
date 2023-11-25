@@ -21,6 +21,8 @@ namespace Device::Storage {
         void Init(NvmeController* nvmeController, uint32_t size);
 
         void identifyController(void* physicalDataPtr);
+
+        void identifyNamespaces(void* physicalDataPtr);
         
         private:
 

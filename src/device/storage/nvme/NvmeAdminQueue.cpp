@@ -36,5 +36,21 @@ namespace Device::Storage {
         queue->updateSubmissionTail();
         queue->waitUntilComplete();
     };
+
+    void NvmeAdminQueue::identifyNamespaces(void* physicalDataPtr) {
+        NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
+        submissionEntry->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
+        submissionEntry->CDW0.FUSE = 0;
+        submissionEntry->CDW0.PSDT = 0;
+        submissionEntry->CDW0.OPC = 0x06;
+        submissionEntry->NSID = 0;
+        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
+        // Get a list of active Namespaces
+        submissionEntry->CDW10 = (0 << 16 | 0x02 << 0);
+        submissionEntry->CDW11 = 0;
+        submissionEntry->CDW14 = 0;
+        queue->updateSubmissionTail();
+        queue->waitUntilComplete();
+    }
     }
 }

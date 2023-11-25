@@ -182,6 +182,7 @@ namespace Device::Storage {
         // Send identify Command
         // Record max transfer size (+ other stuff?)
         // Search + attach namespaces (aka drives)
+        // Create I/O Completion + Submission queue
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
         uint8_t* info = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
         this->adminQueue.identifyController(memoryService.getPhysicalAddress(info));
@@ -190,6 +191,16 @@ namespace Device::Storage {
             log.warn("Controller is not an I/O Controller!");
         }
         maxDataTransfer = (1 << info[77]) * minPageSize;
+
+        // Get Namespace List
+        uint32_t* nsList = reinterpret_cast<uint32_t*>(info);
+        adminQueue.identifyNamespaces(memoryService.getPhysicalAddress(nsList));
+        for(int i = 0; i < 1024; i++) {
+            if(nsList[i] == 0) {
+                break;
+            }
+            log.info("Namespace [%d] found.", nsList[i]);
+        }
 
         memoryService.freeUserMemory(info);
     }
