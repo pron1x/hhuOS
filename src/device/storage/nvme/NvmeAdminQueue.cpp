@@ -37,7 +37,7 @@ namespace Device::Storage {
         queue->waitUntilComplete();
     };
 
-    void NvmeAdminQueue::identifyNamespaces(void* physicalDataPtr) {
+    void NvmeAdminQueue::getNamespaceList(void* physicalDataPtr) {
         NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
         submissionEntry->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
         submissionEntry->CDW0.FUSE = 0;
@@ -47,6 +47,22 @@ namespace Device::Storage {
         submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
         // Get a list of active Namespaces
         submissionEntry->CDW10 = (0 << 16 | 0x02 << 0);
+        submissionEntry->CDW11 = 0;
+        submissionEntry->CDW14 = 0;
+        queue->updateSubmissionTail();
+        queue->waitUntilComplete();
+    }
+
+    void NvmeAdminQueue::identifyNamespace(void* physicalDataPtr, uint32_t nsid) {
+        NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
+        submissionEntry->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
+        submissionEntry->CDW0.FUSE = 0;
+        submissionEntry->CDW0.PSDT = 0;
+        submissionEntry->CDW0.OPC = 0x06;
+        submissionEntry->NSID = nsid;
+        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
+        // Get Identify Namespace Data structure
+        submissionEntry->CDW10 = (0 << 16 | 0x00 << 0);
         submissionEntry->CDW11 = 0;
         submissionEntry->CDW14 = 0;
         queue->updateSubmissionTail();

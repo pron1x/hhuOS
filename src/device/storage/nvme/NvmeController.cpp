@@ -194,12 +194,14 @@ namespace Device::Storage {
 
         // Get Namespace List
         uint32_t* nsList = reinterpret_cast<uint32_t*>(info);
-        adminQueue.identifyNamespaces(memoryService.getPhysicalAddress(nsList));
+        adminQueue.getNamespaceList(memoryService.getPhysicalAddress(nsList));
+        uint32_t* nsInfo = reinterpret_cast<uint32_t*>(memoryService.mapIO(4096));
         for(int i = 0; i < 1024; i++) {
             if(nsList[i] == 0) {
                 break;
             }
-            log.info("Namespace [%d] found.", nsList[i]);
+            adminQueue.identifyNamespace(memoryService.getPhysicalAddress(nsInfo), nsList[i]);
+            log.info("Namespace [%d] found. Size: %d|%d Blocks", nsList[i], nsInfo[0], nsInfo[1]);
         }
 
         memoryService.freeUserMemory(info);

@@ -22,7 +22,9 @@ namespace Device::Storage {
 
         void identifyController(void* physicalDataPtr);
 
-        void identifyNamespaces(void* physicalDataPtr);
+        void getNamespaceList(void* physicalDataPtr);
+
+        void identifyNamespace(void* physicalDataPtr, uint32_t nsid);
         
         private:
 
