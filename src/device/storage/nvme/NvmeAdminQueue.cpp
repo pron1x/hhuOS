@@ -21,50 +21,18 @@ namespace Device::Storage {
         log.debug("Initialized Admin Queue with size %d.", size);
     };
 
-    void NvmeAdminQueue::identifyController(void* physicalDataPtr) {
-        NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
-        submissionEntry->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
-        submissionEntry->CDW0.FUSE = 0;
-        submissionEntry->CDW0.PSDT = 0;
-        submissionEntry->CDW0.OPC = 0x06;
-        submissionEntry->NSID = 0;
-        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
-        // Identify controller that is processing the command
-        submissionEntry->CDW10 = (0 << 16 | 0x01 << 0);
-        submissionEntry->CDW11 = 0;
-        submissionEntry->CDW14 = 0;
-        queue->updateSubmissionTail();
-        queue->waitUntilComplete();
-    };
+    void NvmeAdminQueue::sendIdentifyCommand(void* physicalDataPtr, uint16_t cns, uint32_t nsid = 0) {
+        NvmeQueue::NvmeCommand* command = queue->getSubmissionEntry();
+        command->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
+        command->CDW0.FUSE = 0;
+        command->CDW0.PSDT = 0;
+        command->CDW0.OPC = 0x06; // Identify opcode
+        command->NSID = nsid;
+        command->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
 
-    void NvmeAdminQueue::getNamespaceList(void* physicalDataPtr) {
-        NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
-        submissionEntry->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
-        submissionEntry->CDW0.FUSE = 0;
-        submissionEntry->CDW0.PSDT = 0;
-        submissionEntry->CDW0.OPC = 0x06;
-        submissionEntry->NSID = 0;
-        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
-        // Get a list of active Namespaces
-        submissionEntry->CDW10 = (0 << 16 | 0x02 << 0);
-        submissionEntry->CDW11 = 0;
-        submissionEntry->CDW14 = 0;
-        queue->updateSubmissionTail();
-        queue->waitUntilComplete();
-    }
-
-    void NvmeAdminQueue::identifyNamespace(void* physicalDataPtr, uint32_t nsid) {
-        NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
-        submissionEntry->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
-        submissionEntry->CDW0.FUSE = 0;
-        submissionEntry->CDW0.PSDT = 0;
-        submissionEntry->CDW0.OPC = 0x06;
-        submissionEntry->NSID = nsid;
-        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
-        // Get Identify Namespace Data structure
-        submissionEntry->CDW10 = (0 << 16 | 0x00 << 0);
-        submissionEntry->CDW11 = 0;
-        submissionEntry->CDW14 = 0;
+        command->CDW10 = (0 << 16 | cns);
+        command->CDW11 = 0;
+        command->CDW14 = 0;
         queue->updateSubmissionTail();
         queue->waitUntilComplete();
     }

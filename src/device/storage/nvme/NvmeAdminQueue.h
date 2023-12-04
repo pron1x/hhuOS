@@ -20,11 +20,13 @@ namespace Device::Storage {
         
         void Init(NvmeController* nvmeController, uint32_t size);
 
-        void identifyController(void* physicalDataPtr);
-
-        void getNamespaceList(void* physicalDataPtr);
-
-        void identifyNamespace(void* physicalDataPtr, uint32_t nsid);
+        /**
+         * Send the identify command. Refer to NVMe Reference 1.4 section 5.15
+         * @param physicalDataPtr The physical memory address of a continous 4096 byte memory region
+         * @param cns The CNS Value to use for the command. Refer to Section 5.15.1 - Figure 244
+         * @param nsid The Namespace ID if required by the command.
+        */
+        void sendIdentifyCommand(void* physicalDataPtr, uint16_t cns, uint32_t nsid);
 
         void attachNamespace(void* physicalDataPtr, uint32_t nsid);
         
