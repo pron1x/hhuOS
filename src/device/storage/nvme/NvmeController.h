@@ -60,6 +60,8 @@ namespace Device::Storage {
 
         void clearInterruptMask(uint32_t queueId);
 
+        uint16_t getControllerId() { return id; }
+
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;
@@ -76,6 +78,7 @@ namespace Device::Storage {
         /**
          * hhuOS is 32bit, if access to 64 bit registers is required, cast to 64bit pointer.
         */
+        uint16_t id; 
         uint32_t* crBaseAddress;
         uint32_t doorbellStride;
         uint32_t timeout;

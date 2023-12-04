@@ -192,10 +192,14 @@ namespace Device::Storage {
         }
         maxDataTransfer = (1 << info[77]) * minPageSize;
 
+        id = reinterpret_cast<uint16_t*>(info)[39];
+        
         // Get Namespace List
         uint32_t* nsList = reinterpret_cast<uint32_t*>(info); // We can reuse the info memory block for namespace list
         adminQueue.getNamespaceList(memoryService.getPhysicalAddress(nsList));
         NvmeNamespaceInfo* nsInfo = reinterpret_cast<NvmeNamespaceInfo*>(memoryService.mapIO(4096)); // Get new memory for namespace info
+        // Memory for attachNamespace command
+        uint16_t* attach = reinterpret_cast<uint16_t*>(memoryService.mapIO(4096));
         // Get info on all namespaces (List ends on namespace id 0)
         for(int i = 0; i < 1024; i++) {
             if(nsList[i] == 0) {
@@ -216,11 +220,15 @@ namespace Device::Storage {
 
             log.info("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
                     nsList[i], namespaces[i].blocks, namespaces[i].blockSize);
-
+            // Prepare command Controller list -> Move this to attachNamespace function
+            attach[0] = 1;
+            attach[1] = id;
+            adminQueue.attachNamespace(memoryService.getPhysicalAddress(attach), namespaces[i].id);
         }
 
         memoryService.freeUserMemory(info);
         memoryService.freeUserMemory(nsInfo);
+        memoryService.freeUserMemory(attach);
     }
 
     void NvmeController::initializeAvailableControllers() {

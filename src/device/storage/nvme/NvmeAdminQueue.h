@@ -25,6 +25,8 @@ namespace Device::Storage {
         void getNamespaceList(void* physicalDataPtr);
 
         void identifyNamespace(void* physicalDataPtr, uint32_t nsid);
+
+        void attachNamespace(void* physicalDataPtr, uint32_t nsid);
         
         private:
 

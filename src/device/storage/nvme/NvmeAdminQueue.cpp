@@ -68,5 +68,20 @@ namespace Device::Storage {
         queue->updateSubmissionTail();
         queue->waitUntilComplete();
     }
+
+    void NvmeAdminQueue::attachNamespace(void* physicalDataPtr, uint32_t nsid) {
+        NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
+        submissionEntry-> CDW0.CID = queue->getSubmissionSlotNumber() - 1;
+        submissionEntry->CDW0.FUSE = 0;
+        submissionEntry->CDW0.PSDT = 0;
+        submissionEntry->CDW0.OPC = 0x15; // Command Namespace Attachment
+        submissionEntry->NSID = nsid;
+        submissionEntry->CDW10 = 0; // Controller Attach
+        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
+        
+        queue->updateSubmissionTail();
+        queue->waitUntilComplete();
+    }
+
     }
 }
