@@ -74,7 +74,7 @@ namespace Device::Storage {
         Util::ArrayList<Nvme::NvmeQueue*> queues;
 
         /**
-         * hhuOS is 32bit, if access to 64 bit registerscis required, cast to 64bit pointer.
+         * hhuOS is 32bit, if access to 64 bit registers is required, cast to 64bit pointer.
         */
         uint32_t* crBaseAddress;
         uint32_t doorbellStride;
@@ -178,7 +178,56 @@ namespace Device::Storage {
                 unsigned _reserved0 : 26;
             } bits;
         };
-        
+
+        struct NvmeNamespaceInfo {
+            uint64_t NSZE;
+            uint64_t NCAP;
+            uint64_t NUSE;
+            uint8_t NSFEAT;
+            uint8_t NLBAF;
+            uint8_t FLBAS;
+            uint8_t MC;
+            uint8_t DPC;
+            uint8_t DPS;
+            uint8_t NMIC;
+            uint8_t RESCAP;
+            uint8_t FPI;
+            uint8_t DLFEAT;
+            uint16_t NAWUN;
+            uint16_t NAWUPF;
+            uint16_t NACWU;
+            uint16_t NABSN;
+            uint16_t NABO;
+            uint16_t NABSPF;
+            uint16_t NOIOB;
+            uint64_t NVMCAP[2];
+            uint16_t NPWG;
+            uint16_t NPWA;
+            uint16_t NPDG;
+            uint16_t NPDA;
+            uint16_t NOWS;
+            uint8_t _reserved0[18];
+            uint32_t ANAGRPID;
+            uint8_t _reserved1[3];
+            uint8_t NSATTR;
+            uint16_t NVMSETID;
+            uint16_t ENDGID;
+            uint8_t NGUID[16];
+            uint64_t EUI64;
+            uint32_t LBAFormat[16];
+            uint8_t _reserved2[191];
+            uint8_t _vendor[3711];
+        };
+
+        // NvmeNamespace Information. Block amount and Block size should be uint64_t, not supported by hhuOS currently
+        struct NvmeNamespace {
+            uint32_t id;
+            uint32_t blocks;
+            uint32_t blockSize;
+        };
+
+        // Controller Supports up to 1024 namespaces
+        NvmeNamespace namespaces[1024];
     };
 }
 

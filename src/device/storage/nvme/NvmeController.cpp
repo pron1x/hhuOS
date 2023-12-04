@@ -193,18 +193,34 @@ namespace Device::Storage {
         maxDataTransfer = (1 << info[77]) * minPageSize;
 
         // Get Namespace List
-        uint32_t* nsList = reinterpret_cast<uint32_t*>(info);
+        uint32_t* nsList = reinterpret_cast<uint32_t*>(info); // We can reuse the info memory block for namespace list
         adminQueue.getNamespaceList(memoryService.getPhysicalAddress(nsList));
-        uint32_t* nsInfo = reinterpret_cast<uint32_t*>(memoryService.mapIO(4096));
+        NvmeNamespaceInfo* nsInfo = reinterpret_cast<NvmeNamespaceInfo*>(memoryService.mapIO(4096)); // Get new memory for namespace info
+        // Get info on all namespaces (List ends on namespace id 0)
         for(int i = 0; i < 1024; i++) {
             if(nsList[i] == 0) {
                 break;
-            }
+            }            
+            // Get namespace info data
             adminQueue.identifyNamespace(memoryService.getPhysicalAddress(nsInfo), nsList[i]);
-            log.info("Namespace [%d] found. Size: %d|%d Blocks", nsList[i], nsInfo[0], nsInfo[1]);
+            
+            // Set ID and block amount
+            namespaces[i].id = nsList[i];
+            namespaces[i].blocks = nsInfo->NSZE;
+
+            // Read LBA Format and block size from LBA Format
+            // FOR SOME REASON THIS IS BROKEN.
+            // TODO: Properly calculate the lbaSlot, it can't be hardcoded!
+            uint8_t lbaSlot = 0; //nsInfo->FLBAS & 0x00;
+            namespaces[i].blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
+
+            log.info("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
+                    nsList[i], namespaces[i].blocks, namespaces[i].blockSize);
+
         }
 
         memoryService.freeUserMemory(info);
+        memoryService.freeUserMemory(nsInfo);
     }
 
     void NvmeController::initializeAvailableControllers() {
