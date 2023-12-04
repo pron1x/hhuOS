@@ -18,7 +18,7 @@ namespace Device::Storage {
         nvme->setAdminQueueRegisters(queue->getSubmissionPhysicalAddress(), queue->getCompletionPhysicalAddress());
         nvme->registerQueueInterruptHandler(id, queue);
 
-        log.info("Initialized Admin Queue with size %d.", size);
+        log.debug("Initialized Admin Queue with size %d.", size);
     };
 
     void NvmeAdminQueue::identifyController(void* physicalDataPtr) {

@@ -46,8 +46,8 @@ namespace Device::Storage {
         lcap.lCAP = crBaseAddress[ControllerRegister::LCAP/sizeof(uint32_t)];
         ucap.uCAP = crBaseAddress[ControllerRegister::UCAP/sizeof(uint32_t)];
 
-        log.info("Capabilites: %x %x", ucap.uCAP, lcap.lCAP);
-        log.info("MQES: %x CQR: %x AMS: %x TO: %x DSTRD: %x NSSRS: %x CSS: %x BPS: %x MPSMIN: %x MPSMAX: %x PMRS: %x CMBS: %x", 
+        log.debug("Capabilites: %x %x", ucap.uCAP, lcap.lCAP);
+        log.debug("MQES: %x CQR: %x AMS: %x TO: %x DSTRD: %x NSSRS: %x CSS: %x BPS: %x MPSMIN: %x MPSMAX: %x PMRS: %x CMBS: %x", 
                 lcap.bits.MQES, lcap.bits.CQR, lcap.bits.AMS, lcap.bits.TO, ucap.bits.DSTRD, ucap.bits.NSSRS, ucap.bits.CSS, 
                 ucap.bits.BPS, ucap.bits.MPSMIN, ucap.bits.MPSMAX, ucap.bits.PMRS, ucap.bits.CMBS);
 
@@ -67,8 +67,8 @@ namespace Device::Storage {
 
         doorbellStride = ucap.bits.DSTRD;
 
-        log.info("Max Queue Entries supported: %d", maxQueueEnties);
-        log.info("Doorbell Stride: %d", doorbellStride);
+        log.debug("Max Queue Entries supported: %d", maxQueueEnties);
+        log.debug("Doorbell Stride: %d", doorbellStride);
         if(nvmCommand == 0) {
             log.warn("No I/O Command Set supported! [NVM: %x | Admin: %x]", nvmCommand, adminCommand);
         }
@@ -79,14 +79,14 @@ namespace Device::Storage {
         */
         minPageSize = 1 << (12 + ucap.bits.MPSMIN);
         maxPageSize = 1 << (12 + ucap.bits.MPSMAX);
-        log.info("Min page size: %d, Max page size: %d", minPageSize, maxPageSize);
+        log.debug("Min page size: %d, Max page size: %d", minPageSize, maxPageSize);
 
         /**
          * Worst case wait time for CC.RDY to flip after CC.EN flips.
          * The field is in 500ms units so we multiply by 500.
         */
         timeout = lcap.bits.TO * 500;
-        log.info("Worst case timeout: %dms", timeout);
+        log.debug("Worst case timeout: %dms", timeout);
 
         ControllerConfiguration conf;
         ControllerStatus status;
@@ -100,7 +100,9 @@ namespace Device::Storage {
         //Check if controller needs reset: Ready or Fatal State
         if(status.bits.RDY || status.bits.CFS) {
             log.info("Controller needs to be reset.");
-            if(status.bits.CFS) log.warn("Controller in fatal state.");
+            if(status.bits.CFS) { 
+                log.warn("Controller in fatal state."); 
+            }
             if(status.bits.SHST == 0b00 || status.bits.CFS) { // Need to check for both fatal state and no shutdown notification
                 // Full shutdown required
                 log.info("Shutting down controller...");
@@ -140,7 +142,7 @@ namespace Device::Storage {
             log.info("Controller does not need to be reset.");
         }
         
-        log.info("Configuring controller admin queue.");
+        log.debug("Configuring controller admin queue.");
         /**
          * Controller is ready to be configured. Refer to 7.6.1 Initialization.
         */
@@ -154,7 +156,7 @@ namespace Device::Storage {
         /**
          * Write Controller Configuration to select arbitration mechanism, memory page size and command set
         */
-        log.info("Configuring controller AMS, MPS and CSS.");
+        log.debug("Configuring controller AMS, MPS and CSS.");
         conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         conf.bits.AMS = 0b000;  // Round Robin
         conf.bits.MPS = 0;      // Set Memory Page Size (4096)
@@ -218,7 +220,7 @@ namespace Device::Storage {
             uint8_t lbaSlot = 0; //nsInfo->FLBAS & 0x00;
             namespaces[i].blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
 
-            log.info("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
+            log.debug("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
                     nsList[i], namespaces[i].blocks, namespaces[i].blockSize);
             // Prepare command Controller list -> Move this to attachNamespace function
             attach[0] = 1;
@@ -232,21 +234,23 @@ namespace Device::Storage {
     }
 
     void NvmeController::initializeAvailableControllers() {
+        log.setLevel(log.DEBUG);
         auto devices = Pci::search(Pci::Class::MASS_STORAGE, 0x08);
         for (const auto &device : devices) {
             auto *controller = new NvmeController(device);
             controller->plugin();
             controller->initialize();
         }
+        log.setLevel(log.INFO);
     }
 
     void NvmeController::setQueueTail(uint32_t id, uint32_t entry) {
-        log.info("Setting Queue[%d] Tail Doorebell to %d", id, entry);
+        log.trace("Setting Queue[%d] Tail Doorebell to %d", id, entry);
         crBaseAddress[getQueueDoorbellOffset(id, 0)] = entry;
     }
 
     void NvmeController::setQueueHead(uint32_t id, uint32_t entry) {
-        log.info("Setting Queue[%d] Head Doorbell to %d", id, entry);
+        log.trace("Setting Queue[%d] Head Doorbell to %d", id, entry);
         crBaseAddress[getQueueDoorbellOffset(id, 1)] = entry;
     }
 
@@ -269,7 +273,7 @@ namespace Device::Storage {
     }
 
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
-        log.info("Interrupt received innit! %x", frame.interrupt);
+        log.trace("Received Interrupt: %x", frame.interrupt);
         for(Nvme::NvmeQueue* queue : queues) {
             queue->checkCompletionQueue();
         }

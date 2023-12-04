@@ -30,7 +30,7 @@ namespace Device::Storage {
             compQueue[i].DW3.P = 0;
         }
 
-        log.info("Initialized Queue %d with size %d.", id, size);
+        log.debug("Initialized Queue %d with size %d.", id, size);
     };
 
     NvmeQueue::NvmeCommand* NvmeQueue::getSubmissionEntry() {
@@ -40,7 +40,7 @@ namespace Device::Storage {
     }
 
     void NvmeQueue::updateSubmissionTail() {
-        log.info("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
+        log.trace("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
         waiting = true;
         nvme->setQueueTail(id, subQueueTail);
     }
@@ -50,7 +50,7 @@ namespace Device::Storage {
         nvme->setInterruptMask(id);
         // Loop through all new entries in completion queue, indicated by phase bit
         while(compQueue[compQueueHead].DW3.P == phase) {
-            log.info("Status field for command[%d]: %x", compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
+            log.debug("Status field for command[%d]: %x", compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
             if(compQueueHead + 1 == size) {
                 // Phase bit toggles every wrap around!
                 phase = (phase + 1) % 2;
