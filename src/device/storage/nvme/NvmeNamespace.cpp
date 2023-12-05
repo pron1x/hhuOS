@@ -3,7 +3,7 @@
 namespace Device::Storage {
 namespace Nvme {
 
-    NvmeNamespace::NvmeNamespace(NvmeController* nvme, uint16_t id, uint64_t blocks, uint64_t blocksize) {
+    NvmeNamespace::NvmeNamespace(NvmeController* nvme, uint32_t id, uint64_t blocks, uint32_t blocksize) {
         this->nvme = nvme;
         this->id = id;
         this->blocks = blocks;

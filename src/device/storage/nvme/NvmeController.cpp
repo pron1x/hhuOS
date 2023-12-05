@@ -219,21 +219,26 @@ namespace Device::Storage {
             adminQueue.sendIdentifyCommand(memoryService.getPhysicalAddress(nsInfo), 0, nsList[i]);
             
             // Set ID and block amount
-            namespaces[i].id = nsList[i];
-            namespaces[i].blocks = nsInfo->NSZE;
+            uint32_t nsid = nsList[i];
+            uint64_t blocks = nsInfo->NSZE;
 
             // Read LBA Format and block size from LBA Format
             // FOR SOME REASON THIS IS BROKEN.
-            // TODO: Properly calculate the lbaSlot, it can't be hardcoded!
+            // FIXME: Properly calculate the lbaSlot, it can't be hardcoded!
             uint8_t lbaSlot = 0; //nsInfo->FLBAS & 0x00;
-            namespaces[i].blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
+
+            // FIXME: This logs as size 0 from namespace object - check why 0 is returned
+            uint32_t blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
+            log.debug("Namespace blocksize: %d", blockSize);
+
+            namespaces.add(new Nvme::NvmeNamespace(this, nsid, blocks, blockSize));
 
             log.debug("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
-                    nsList[i], namespaces[i].blocks, namespaces[i].blockSize);
+                    nsid, namespaces.get(i)->getSectorCount(), namespaces.get(i)->getSectorSize());
             // Prepare command Controller list -> Move this to attachNamespace function
             controllerList[0] = 1;
-            controllerList[1] = id;
-            adminQueue.attachNamespace(memoryService.getPhysicalAddress(controllerList), namespaces[i].id);
+            controllerList[1] = this->id;
+            adminQueue.attachNamespace(memoryService.getPhysicalAddress(controllerList), nsid);
         }
 
         memoryService.freeUserMemory(info);

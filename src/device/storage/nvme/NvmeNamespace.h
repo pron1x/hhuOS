@@ -9,7 +9,7 @@ namespace Nvme {
     class NvmeNamespace : StorageDevice {
         public:
 
-        explicit NvmeNamespace(NvmeController* nvme, uint16_t id, uint64_t blocks, uint64_t blocksize);
+        explicit NvmeNamespace(NvmeController* nvme, uint32_t id, uint64_t blocks, uint32_t blocksize);
 
         ~NvmeNamespace() = default;
 
@@ -23,7 +23,7 @@ namespace Nvme {
 
         private:
         NvmeController* nvme;
-        uint16_t id;
+        uint32_t id;
         uint64_t blocks;
         uint32_t blockSize;
     };

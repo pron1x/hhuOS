@@ -8,6 +8,7 @@
 #include "device/pci/PciDevice.h"
 
 #include "device/storage/nvme/NvmeAdminQueue.h"
+#include "NvmeNamespace.h"
 
 #include "lib/util/collection/ArrayList.h"
 namespace Device::Storage {
@@ -15,6 +16,7 @@ namespace Device::Storage {
     namespace Nvme {
         class NvmeAdminQueue;
         class NvmeQueue;
+        class NvmeNamespace;
     }
 }
 
@@ -74,6 +76,7 @@ namespace Device::Storage {
         const Device::PciDevice* pci;
 
         Util::ArrayList<Nvme::NvmeQueue*> queues;
+        Util::ArrayList<Nvme::NvmeNamespace*> namespaces;
 
         /**
          * hhuOS is 32bit, if access to 64 bit registers is required, cast to 64bit pointer.
@@ -221,16 +224,6 @@ namespace Device::Storage {
             uint8_t _reserved2[191];
             uint8_t _vendor[3711];
         };
-
-        // NvmeNamespace Information. Block amount and Block size should be uint64_t, not supported by hhuOS currently
-        struct NvmeNamespace {
-            uint32_t id;
-            uint32_t blocks;
-            uint32_t blockSize;
-        };
-
-        // Controller Supports up to 1024 namespaces
-        NvmeNamespace namespaces[1024];
     };
 }
 
