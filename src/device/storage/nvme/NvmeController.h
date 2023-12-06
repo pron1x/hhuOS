@@ -100,6 +100,14 @@ namespace Device::Storage {
          * @param completionQueue 0 for submission, 1 for completion
         */
         uint32_t getQueueDoorbellOffset(const uint32_t y, const uint8_t completionQueue);
+
+        // Constants
+
+        static const constexpr uint8_t PCI_SUBCLASS_NVME = 0x08;
+        static const constexpr uint8_t SHN_ABRUPT = 0b10;
+        static const constexpr uint8_t SHST_NORMAL_OPERATION = 0b00;
+        static const constexpr uint8_t SHST_OCCURING = 0b01;
+        static const constexpr uint8_t SHST_COMPLETE = 0b10;
         
 
         // Enums / Structs for NVMe Controllers

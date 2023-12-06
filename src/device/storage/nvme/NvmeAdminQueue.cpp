@@ -26,7 +26,7 @@ namespace Device::Storage {
         command->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
         command->CDW0.FUSE = 0;
         command->CDW0.PSDT = 0;
-        command->CDW0.OPC = 0x06; // Identify opcode
+        command->CDW0.OPC = OPC_IDENTIFY; // Identify opcode
         command->NSID = nsid;
         command->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
 
@@ -38,11 +38,12 @@ namespace Device::Storage {
     }
 
     void NvmeAdminQueue::attachNamespace(void* physicalDataPtr, uint32_t nsid) {
+        // FIXME: The command cancels with Error 0x02!
         NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
         submissionEntry-> CDW0.CID = queue->getSubmissionSlotNumber() - 1;
         submissionEntry->CDW0.FUSE = 0;
         submissionEntry->CDW0.PSDT = 0;
-        submissionEntry->CDW0.OPC = 0x15; // Command Namespace Attachment
+        submissionEntry->CDW0.OPC = OPC_NS_ATTACHMENT; // Command Namespace Attachment
         submissionEntry->NSID = nsid;
         submissionEntry->CDW10 = 0; // Controller Attach
         submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);

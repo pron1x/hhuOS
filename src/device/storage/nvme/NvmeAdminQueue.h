@@ -45,6 +45,10 @@ namespace Device::Storage {
         // Submission and completion queue size
         uint32_t size;
 
+        // OP Code constants
+        static const constexpr uint8_t OPC_IDENTIFY = 0x06;
+        static const constexpr uint8_t OPC_NS_ATTACHMENT = 0x15;
+
     };
     }
 }

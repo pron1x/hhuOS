@@ -60,6 +60,9 @@ namespace Device::Storage {
        
         uint8_t nvmCommand = (ucap.bits.CSS >> 0) & 0x1;
         uint8_t adminCommand = ((ucap.bits.CSS) >> 7) & 0x1;
+        if(nvmCommand == 0) {
+            log.warn("No I/O Command Set supported! [NVM: %x | Admin: %x]", nvmCommand, adminCommand);
+        }
 
         /**
          * Doorbell Stride is used to calculate Submission/Completion Queue Offsets
@@ -69,9 +72,6 @@ namespace Device::Storage {
 
         log.debug("Max Queue Entries supported: %d", maxQueueEnties);
         log.debug("Doorbell Stride: %d", doorbellStride);
-        if(nvmCommand == 0) {
-            log.warn("No I/O Command Set supported! [NVM: %x | Admin: %x]", nvmCommand, adminCommand);
-        }
 
         /**
          * hhuOS has 4kB aligned, if minPageSize is > 4kB Controller can't be initialized. 
@@ -103,19 +103,19 @@ namespace Device::Storage {
             if(status.bits.CFS) { 
                 log.warn("Controller in fatal state."); 
             }
-            if(status.bits.SHST == 0b00 || status.bits.CFS) { // Need to check for both fatal state and no shutdown notification
+            if(status.bits.SHST == SHST_NORMAL_OPERATION || status.bits.CFS) { // Need to check for both fatal state and no shutdown notification
                 // Full shutdown required
                 log.info("Shutting down controller...");
                 conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
-                conf.bits.SHN = 0b10; // Abrupt shutdown notification due to fatal state
+                conf.bits.SHN = SHN_ABRUPT; // Abrupt shutdown notification due to fatal state
                 crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)] = conf.cc;
                 Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout)); // Wait for shutdown to complete
 
                 status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
-                if(status.bits.SHST != 0b10) { //shutdown not complete, wait more
+                if(status.bits.SHST != SHST_COMPLETE) { //shutdown not complete, wait more
                     Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
                     status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
-                    if(status.bits.SHST != 0b10) {
+                    if(status.bits.SHST != SHST_COMPLETE) {
                         // Failed to shutdown controller
                         log.error("Failed to shutdown controller!");
                         // Controller cannot be initialized, check how to exit constructor!
@@ -223,13 +223,12 @@ namespace Device::Storage {
             uint64_t blocks = nsInfo->NSZE;
 
             // Read LBA Format and block size from LBA Format
-            // FOR SOME REASON THIS IS BROKEN.
-            // FIXME: Properly calculate the lbaSlot, it can't be hardcoded!
-            uint8_t lbaSlot = 0; //nsInfo->FLBAS & 0x00;
+            // TODO: Assure that it's correct, seems to work now (FLBAS returns 0)
+            uint8_t lbaSlot = nsInfo->FLBAS & 0x0F;
+            log.trace("NS[%d]: lbaSlot: %x", nsList[i], lbaSlot);
 
             // FIXME: This logs as size 0 from namespace object - check why 0 is returned
             uint32_t blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
-            log.debug("Namespace blocksize: %d", blockSize);
 
             namespaces.add(new Nvme::NvmeNamespace(this, nsid, blocks, blockSize));
 
@@ -248,7 +247,7 @@ namespace Device::Storage {
 
     void NvmeController::initializeAvailableControllers() {
         log.setLevel(log.DEBUG);
-        auto devices = Pci::search(Pci::Class::MASS_STORAGE, 0x08);
+        auto devices = Pci::search(Pci::Class::MASS_STORAGE, PCI_SUBCLASS_NVME);
         for (const auto &device : devices) {
             auto *controller = new NvmeController(device);
             controller->plugin();
