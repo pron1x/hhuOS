@@ -52,5 +52,46 @@ namespace Device::Storage {
         queue->waitUntilComplete();
     }
 
+    NvmeQueue* NvmeAdminQueue::createNewQueue(uint16_t id, uint32_t size) {
+        // Create queue object
+        NvmeQueue* ioqueue = new NvmeQueue(nvme, id, size);
+        // Submit command to create completion queue
+        uint32_t cid = queue->getSubmissionSlotNumber();
+        NvmeQueue::NvmeCommand* command = queue->getSubmissionEntry();
+        command->CDW0.CID = cid;
+        command->CDW0.FUSE = 0;
+        command->CDW0.PSDT = 0;
+        command->CDW0.OPC = OPC_CREATE_IO_COMPLETION_QUEUE;
+        // PRP Entry 1 contains base memory address, since we use physical contigous memory regions
+        command->PRP1 = queue->getCompletionPhysicalAddress();
+        // DWORD10 contains the queue size and identifier
+        command->CDW10 = (size << 16 | id );
+        // DWORD11 contains interrupt vector, interrupt enable and physical contiguity information
+        command->CDW11 = (0 << 16 | 1 << 1 | 1);
+        // Submit the command
+        queue->updateSubmissionTail();
+
+        // Create command to create submission queue
+        cid = queue->getSubmissionSlotNumber();
+        command = queue->getSubmissionEntry();
+        command->CDW0.CID = cid;
+        command->CDW0.FUSE = 0;
+        command->CDW0.PSDT = 0;
+        command->CDW0.OPC = OPC_CREATE_IO_SUBMISSION_QUEUE;
+        // PRP Entry 1 contains base memory address, since we use physical contigous memory regions
+        command->PRP1 = queue->getSubmissionPhysicalAddress();
+        // DWORD10 contains queue size and identifier
+        command->CDW10 = (size << 16 | id);
+        // DWORD11 contains completion queue identifier, queue priority and physical contiguity information
+        command->CDW11 = (id << 16 | 0b11 << 1 | 1); // 0b11 is low priority, field ignored since we do not use wighted round robin arbitration
+        // DWORD12 contains NVM Set information. Cleared to 0 to not associate queue with specific NVM Set
+        command->CDW12 = 0;
+
+        // Submit the command
+        queue->updateSubmissionTail();
+        queue->waitUntilComplete();
+        return ioqueue;
+    }
+
     }
 }

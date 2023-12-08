@@ -29,6 +29,8 @@ namespace Device::Storage {
         void sendIdentifyCommand(void* physicalDataPtr, uint16_t cns, uint32_t nsid);
 
         void attachNamespace(void* physicalDataPtr, uint32_t nsid);
+
+        NvmeQueue* createNewQueue(uint16_t id, uint32_t size);
         
         private:
 
@@ -46,6 +48,8 @@ namespace Device::Storage {
         uint32_t size;
 
         // OP Code constants
+        static const constexpr uint8_t OPC_CREATE_IO_SUBMISSION_QUEUE = 0x01;
+        static const constexpr uint8_t OPC_CREATE_IO_COMPLETION_QUEUE = 0x05;
         static const constexpr uint8_t OPC_IDENTIFY = 0x06;
         static const constexpr uint8_t OPC_NS_ATTACHMENT = 0x15;
 
