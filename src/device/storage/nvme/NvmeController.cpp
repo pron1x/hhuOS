@@ -200,7 +200,11 @@ namespace Device::Storage {
         id = reinterpret_cast<uint16_t*>(info)[39];
         
         // Reuse the info memory block for namespace list
-        uint32_t* nsList = reinterpret_cast<uint32_t*>(info); 
+        uint32_t* nsList = reinterpret_cast<uint32_t*>(info);
+
+        // Create the first I/O Queue Pair
+        // FIXME: Enabled interrupts probably cause issues, check
+        queues.add(adminQueue.createNewQueue(1, NVME_QUEUE_ENTRIES));
 
         // Identify the namespace list
         adminQueue.sendIdentifyCommand(memoryService.getPhysicalAddress(nsList), 0x02, 0);

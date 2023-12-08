@@ -70,6 +70,7 @@ namespace Device::Storage {
         command->CDW11 = (0 << 16 | 1 << 1 | 1);
         // Submit the command
         queue->updateSubmissionTail();
+        queue->waitUntilComplete();
 
         // Create command to create submission queue
         cid = queue->getSubmissionSlotNumber();
