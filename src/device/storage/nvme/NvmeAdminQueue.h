@@ -30,7 +30,7 @@ namespace Device::Storage {
 
         void attachNamespace(void* physicalDataPtr, uint32_t nsid);
 
-        NvmeQueue* createNewQueue(uint16_t id, uint32_t size);
+        NvmeQueue* createNewQueue(uint16_t queueId, uint32_t size);
         
         private:
 
