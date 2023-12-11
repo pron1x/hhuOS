@@ -154,13 +154,15 @@ namespace Device::Storage {
         adminQueue.Init(this, NVME_QUEUE_ENTRIES);
 
         /**
-         * Write Controller Configuration to select arbitration mechanism, memory page size and command set
+         * Write Controller Configuration to select arbitration mechanism, memory page size, command set and I/O Queue size
         */
         log.debug("Configuring controller AMS, MPS and CSS.");
         conf.cc = crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)];
         conf.bits.AMS = 0b000;  // Round Robin
         conf.bits.MPS = 0;      // Set Memory Page Size (4096)
         conf.bits.CSS = 0b000;  // NVM Command Set
+        conf.bits.IOCQES = NVME_QUEUE_ENTRIES;
+        conf.bits.IOSQES = NVME_QUEUE_ENTRIES;
         crBaseAddress[ControllerRegister::CC/sizeof(uint32_t)] = conf.cc;
 
         // Set enable to 1
@@ -196,15 +198,11 @@ namespace Device::Storage {
             log.warn("Controller is not an I/O Controller!");
         }
         maxDataTransfer = (1 << info[77]) * minPageSize;
-        // TODO: Check why this returns 0
+        // TODO: Check why controller ID field returns 0
         id = reinterpret_cast<uint16_t*>(info)[39];
         
         // Reuse the info memory block for namespace list
         uint32_t* nsList = reinterpret_cast<uint32_t*>(info);
-
-        // Create the first I/O Queue Pair
-        // FIXME: Enabled interrupts probably cause issues, check
-        queues.add(adminQueue.createNewQueue(1, NVME_QUEUE_ENTRIES));
 
         // Identify the namespace list
         adminQueue.sendIdentifyCommand(memoryService.getPhysicalAddress(nsList), 0x02, 0);
@@ -221,7 +219,6 @@ namespace Device::Storage {
             }            
             // Get namespace info data
             adminQueue.sendIdentifyCommand(memoryService.getPhysicalAddress(nsInfo), 0, nsList[i]);
-            
             // Set ID and block amount
             uint32_t nsid = nsList[i];
             uint64_t blocks = nsInfo->NSZE;
@@ -240,9 +237,16 @@ namespace Device::Storage {
                     nsid, namespaces.get(i)->getSectorCount(), namespaces.get(i)->getSectorSize());
             // Prepare command Controller list -> Move this to attachNamespace function
             controllerList[0] = 1;
-            controllerList[1] = this->id;
+            controllerList[1] = 1;//this->id;
             adminQueue.attachNamespace(memoryService.getPhysicalAddress(controllerList), nsid);
+            log.debug("Attached namespace.");
         }
+
+        // Create the first I/O Queue Pair
+        // FIXME: Enabled interrupts probably cause issues, check
+        // HACK: According to OSDevWiki I/O Queue should be created BEFORE namespace identification/attachment.
+        // This causes interrupt flodding (for some unknown reason).
+        ioqueue = adminQueue.createNewQueue(1, NVME_QUEUE_ENTRIES);
 
         memoryService.freeUserMemory(info);
         memoryService.freeUserMemory(nsInfo);

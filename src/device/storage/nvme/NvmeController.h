@@ -68,7 +68,6 @@ namespace Device::Storage {
 
         void trigger(const Kernel::InterruptFrame &frame) override;
 
-        Nvme::NvmeAdminQueue adminQueue;
         
         private:
 
@@ -77,6 +76,9 @@ namespace Device::Storage {
 
         Util::ArrayList<Nvme::NvmeQueue*> queues;
         Util::ArrayList<Nvme::NvmeNamespace*> namespaces;
+        
+        Nvme::NvmeAdminQueue adminQueue;
+        Nvme::NvmeQueue* ioqueue;
 
         /**
          * hhuOS is 32bit, if access to 64 bit registers is required, cast to 64bit pointer.

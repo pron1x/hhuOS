@@ -22,8 +22,9 @@ namespace Device::Storage {
     };
 
     void NvmeAdminQueue::sendIdentifyCommand(void* physicalDataPtr, uint16_t cns, uint32_t nsid = 0) {
+        uint32_t cid = queue->getSubmissionSlotNumber();        
         NvmeQueue::NvmeCommand* command = queue->getSubmissionEntry();
-        command->CDW0.CID = queue->getSubmissionSlotNumber() - 1;
+        command->CDW0.CID = cid;
         command->CDW0.FUSE = 0;
         command->CDW0.PSDT = 0;
         command->CDW0.OPC = OPC_IDENTIFY; // Identify opcode
@@ -39,8 +40,9 @@ namespace Device::Storage {
 
     void NvmeAdminQueue::attachNamespace(void* physicalDataPtr, uint32_t nsid) {
         // FIXME: The command cancels with Error 0x02!
+        uint32_t cid = queue->getSubmissionSlotNumber();
         NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
-        submissionEntry-> CDW0.CID = queue->getSubmissionSlotNumber() - 1;
+        submissionEntry-> CDW0.CID = cid;
         submissionEntry->CDW0.FUSE = 0;
         submissionEntry->CDW0.PSDT = 0;
         submissionEntry->CDW0.OPC = OPC_NS_ATTACHMENT; // Command Namespace Attachment
