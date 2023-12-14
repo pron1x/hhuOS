@@ -2,6 +2,7 @@
 #define HHUOS_NVMEQUEUE_H
 
 #include "NvmeController.h"
+#include "lib/util/async/Spinlock.h"
 #include <cstdint>
 
 namespace Device::Storage {
@@ -89,6 +90,7 @@ namespace Device::Storage {
         // Phase bit for new completion queue entries
         uint8_t phase = 1;
         volatile bool waiting = false;
+        Util::Async::Spinlock lock;
 
     };
     }

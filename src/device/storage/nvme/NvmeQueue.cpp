@@ -46,11 +46,12 @@ namespace Device::Storage {
     }
 
     void NvmeQueue::checkCompletionQueue() {
+        lock.acquire();
         // Set Interrupt Mask for this queue
         nvme->setInterruptMask(id);
         // Loop through all new entries in completion queue, indicated by phase bit
         while(compQueue[compQueueHead].DW3.P == phase) {
-            log.debug("Status field for command[%d]: %x", compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
+            log.debug("[Queue %d] Status field for command[%d]: %x", id, compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
             if(compQueueHead + 1 == size) {
                 // Phase bit toggles every wrap around!
                 phase = (phase + 1) % 2;
@@ -60,6 +61,7 @@ namespace Device::Storage {
         nvme->setQueueHead(id, compQueueHead);
         nvme->clearInterruptMask(id);
         waiting = false;
+        lock.release();
     }
     }
 }
