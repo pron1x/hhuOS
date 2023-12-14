@@ -28,7 +28,6 @@ namespace Device::Storage {
 
         void checkCompletionQueue();
 
-        void waitUntilComplete() { while (waiting) {}; }
 
         public:
         struct NvmeCommand {
@@ -67,6 +66,8 @@ namespace Device::Storage {
         };
 
         NvmeCommand* getSubmissionEntry();
+
+        NvmeCompletionEntry* waitUntilComplete(uint32_t slot);
 
         void updateSubmissionTail();
 

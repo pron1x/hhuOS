@@ -39,6 +39,11 @@ namespace Device::Storage {
         return ptr;
     }
 
+    NvmeQueue::NvmeCompletionEntry* NvmeQueue::waitUntilComplete(uint32_t slot) {
+         while (waiting) {}
+         return &compQueue[slot];
+    }
+
     void NvmeQueue::updateSubmissionTail() {
         log.trace("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
         waiting = true;
