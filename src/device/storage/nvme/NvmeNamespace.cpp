@@ -10,6 +10,14 @@ namespace Nvme {
         this->blockSize = blocksize;
     }
 
+    uint32_t NvmeNamespace::getSectorSize() {
+        return blockSize;
+    }
+
+    uint64_t NvmeNamespace::getSectorCount() { 
+        return blocks; 
+    };
+
     uint32_t NvmeNamespace::read(uint8_t *buffer, uint32_t startSector, uint32_t sectorCount) {
         return 0;
     };

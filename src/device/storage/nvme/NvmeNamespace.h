@@ -13,9 +13,9 @@ namespace Nvme {
 
         ~NvmeNamespace() = default;
 
-        uint32_t getSectorSize() override { return blockSize; };
+        uint32_t getSectorSize() override;
 
-        uint64_t getSectorCount() override { return blocks; };
+        uint64_t getSectorCount() override;
 
         uint32_t read(uint8_t *buffer, uint32_t startSector, uint32_t sectorCount) override;
 
