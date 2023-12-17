@@ -27,6 +27,9 @@ namespace Device::Storage {
         uint32_t getSubmissionSlotNumber() { return subQueueTail; }
 
         void checkCompletionQueue();
+        
+        void lockQueue() { lock.acquire(); }
+        void unlockQueue() { lock.release(); }
 
 
         public:

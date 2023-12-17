@@ -22,6 +22,7 @@ namespace Device::Storage {
     };
 
     void NvmeAdminQueue::sendIdentifyCommand(void* physicalDataPtr, uint16_t cns, uint32_t nsid = 0) {
+        queue->lockQueue();
         uint32_t slot = queue->getSubmissionSlotNumber();        
         NvmeQueue::NvmeCommand* command = queue->getSubmissionEntry();
         command->CDW0.CID = slot;
@@ -34,12 +35,14 @@ namespace Device::Storage {
         command->CDW10 = (0 << 16 | cns);
         command->CDW11 = 0;
         command->CDW14 = 0;
+        queue->unlockQueue();
         queue->updateSubmissionTail();
         queue->waitUntilComplete(slot);
     }
 
     void NvmeAdminQueue::attachNamespace(void* physicalDataPtr, uint32_t nsid) {
         // FIXME: The command cancels with Error 0x02!
+        queue->lockQueue();
         uint32_t slot = queue->getSubmissionSlotNumber();
         NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
         submissionEntry-> CDW0.CID = slot;
@@ -50,6 +53,7 @@ namespace Device::Storage {
         submissionEntry->CDW10 = 0; // Controller Attach
         submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
         
+        queue->unlockQueue();
         queue->updateSubmissionTail();
         queue->waitUntilComplete(slot);
     }
@@ -57,6 +61,7 @@ namespace Device::Storage {
     NvmeQueue* NvmeAdminQueue::createNewQueue(uint16_t queueId, uint32_t size) {
         // Create queue object
         NvmeQueue* ioqueue = new NvmeQueue(nvme, queueId, size);
+        queue->lockQueue();
         // Submit command to create completion queue
         uint32_t slot = queue->getSubmissionSlotNumber();
         NvmeQueue::NvmeCommand* command = queue->getSubmissionEntry();
@@ -71,10 +76,12 @@ namespace Device::Storage {
         // DWORD11 contains interrupt vector, interrupt enable and physical contiguity information
         command->CDW11 = (0 << 16 | 1 << 1 | 1);
         // Submit the command
+        queue->unlockQueue();
         queue->updateSubmissionTail();
         queue->waitUntilComplete(slot);
 
         // Create command to create submission queue
+        queue->lockQueue();
         slot = queue->getSubmissionSlotNumber();
         command = queue->getSubmissionEntry();
         command->CDW0.CID = slot;
@@ -91,6 +98,7 @@ namespace Device::Storage {
         command->CDW12 = 0;
 
         // Submit the command
+        queue->unlockQueue();
         queue->updateSubmissionTail();
         queue->waitUntilComplete(slot);
         nvme->registerQueueInterruptHandler(queueId, ioqueue);

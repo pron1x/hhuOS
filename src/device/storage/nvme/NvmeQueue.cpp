@@ -51,7 +51,7 @@ namespace Device::Storage {
     }
 
     void NvmeQueue::checkCompletionQueue() {
-        lock.acquire();
+        lockQueue();
         // Set Interrupt Mask for this queue
         nvme->setInterruptMask(id);
         // Loop through all new entries in completion queue, indicated by phase bit
@@ -66,7 +66,7 @@ namespace Device::Storage {
         nvme->setQueueHead(id, compQueueHead);
         nvme->clearInterruptMask(id);
         waiting = false;
-        lock.release();
+        unlockQueue();
     }
     }
 }
