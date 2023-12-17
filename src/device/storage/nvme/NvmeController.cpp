@@ -211,7 +211,6 @@ namespace Device::Storage {
         NvmeNamespaceInfo* nsInfo = reinterpret_cast<NvmeNamespaceInfo*>(memoryService.mapIO(4096));
         
         // Memory for attachNamespace command
-        uint16_t* controllerList = reinterpret_cast<uint16_t*>(memoryService.mapIO(4096));
         // Get info on all namespaces (List ends on namespace id 0)
         for(int i = 0; i < 1024; i++) {
             if(nsList[i] == 0) {
@@ -231,14 +230,12 @@ namespace Device::Storage {
             // FIXME: This logs as size 0 from namespace object - check why 0 is returned
             uint32_t blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
 
-            namespaces.add(new Nvme::NvmeNamespace(this, nsid, blocks, blockSize));
+            Nvme::NvmeNamespace* nsptr = new Nvme::NvmeNamespace(this, nsid, blocks, blockSize);
+            namespaces.add(nsptr);
 
             log.debug("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
                     nsid, namespaces.get(i)->getSectorCount(), namespaces.get(i)->getSectorSize());
-            // Prepare command Controller list -> Move this to attachNamespace function
-            controllerList[0] = 1;
-            controllerList[1] = 1;//this->id;
-            adminQueue.attachNamespace(memoryService.getPhysicalAddress(controllerList), nsid);
+            adminQueue.attachNamespace(this->id, nsid);
             log.debug("Attached namespace.");
         }
 
@@ -250,7 +247,6 @@ namespace Device::Storage {
 
         memoryService.freeUserMemory(info);
         memoryService.freeUserMemory(nsInfo);
-        memoryService.freeUserMemory(controllerList);
     }
 
     void NvmeController::initializeAvailableControllers() {

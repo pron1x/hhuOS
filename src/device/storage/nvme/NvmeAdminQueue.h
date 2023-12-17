@@ -28,7 +28,7 @@ namespace Device::Storage {
         */
         void sendIdentifyCommand(void* physicalDataPtr, uint16_t cns, uint32_t nsid);
 
-        void attachNamespace(void* physicalDataPtr, uint32_t nsid);
+        void attachNamespace(uint16_t controllerId, uint32_t nsid);
 
         NvmeQueue* createNewQueue(uint16_t queueId, uint32_t size);
         

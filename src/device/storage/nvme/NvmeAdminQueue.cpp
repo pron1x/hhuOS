@@ -40,8 +40,15 @@ namespace Device::Storage {
         queue->waitUntilComplete(slot);
     }
 
-    void NvmeAdminQueue::attachNamespace(void* physicalDataPtr, uint32_t nsid) {
-        // FIXME: The command cancels with Error 0x02!
+    // FIXME: The command cancels with Error 0x02!
+    void NvmeAdminQueue::attachNamespace(uint16_t controllerId, uint32_t nsid) {
+        // Prepare Controller List
+        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
+        uint16_t* controllerList = reinterpret_cast<uint16_t*>(memoryService.mapIO(4096));
+        controllerList[0] = 1;
+        controllerList[1] = controllerId;
+
+        //Prepare Command
         queue->lockQueue();
         uint32_t slot = queue->getSubmissionSlotNumber();
         NvmeQueue::NvmeCommand* submissionEntry = queue->getSubmissionEntry();
@@ -51,11 +58,12 @@ namespace Device::Storage {
         submissionEntry->CDW0.OPC = OPC_NS_ATTACHMENT; // Command Namespace Attachment
         submissionEntry->NSID = nsid;
         submissionEntry->CDW10 = 0; // Controller Attach
-        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(physicalDataPtr);
+        submissionEntry->PRP1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(controllerList));
         
         queue->unlockQueue();
         queue->updateSubmissionTail();
         queue->waitUntilComplete(slot);
+        memoryService.freeUserMemory(controllerList);
     }
 
     NvmeQueue* NvmeAdminQueue::createNewQueue(uint16_t queueId, uint32_t size) {
