@@ -64,6 +64,8 @@ namespace Device::Storage {
 
         uint16_t getControllerId() { return id; }
 
+        uint32_t performRead(uint16_t nsid, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount);
+
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;
@@ -76,7 +78,7 @@ namespace Device::Storage {
 
         Util::ArrayList<Nvme::NvmeQueue*> queues;
         Util::ArrayList<Nvme::NvmeNamespace*> namespaces;
-        
+
         Nvme::NvmeAdminQueue adminQueue;
         Nvme::NvmeQueue* ioqueue;
 

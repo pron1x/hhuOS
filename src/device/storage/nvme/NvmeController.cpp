@@ -260,6 +260,58 @@ namespace Device::Storage {
         log.setLevel(log.INFO);
     }
 
+    uint32_t NvmeController::performRead(uint16_t nsid, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount) {
+        /**
+         * Read command uses DWORD10, DWORD11, DWORD12, DWORD13, DWORD14 and DWORD15.
+         * DWORD10/DWORD11:
+         *      Address of starting logical block.
+         *      DWORD10 bits 31:00
+         *      DWORD11 bits 63:32
+         * DWORD12:
+         *      15:00 Number of blocks to be read
+         *      29:26 Protection Information Field, unused in this implementation
+         *      30    Force Unit Access, unused and cleared to 0
+         *      31    Limited Retry, Cleared to 0, controller applies all available error recovery to return data
+         * DWORD13:
+         *      03:00 Access Frequency: Cleared to 0 to provide no frequency information
+         *      05:04 Access Latency: Cleared to 0 to provide no latency information
+         *      06    Sequential Request: If 1, command is part of sequential read that includes multiple reads
+         *      07    Incompressibe: Cleared to 0 to provide no compression information
+         * DWORD14:
+         *      Expected Initial Logical Block Reference Tag
+         *      No end-to-end protection support, so cleared to 0
+         * DWORD15
+         *      Expected Logical Block Application Tag
+         *      Expected Logical Block Application Tag Mask
+         *      No end-to-end protection support, so cleared to 0
+        */
+        ioqueue->lockQueue();
+        uint32_t cid = ioqueue->getSubmissionSlotNumber();
+        Nvme::NvmeQueue::NvmeCommand* command = ioqueue->getSubmissionEntry();
+        command->CDW0.CID = cid;
+        command->CDW0.FUSE = 0;
+        command->CDW0.PSDT = 0;
+        command->CDW0.OPC = 1;
+
+        command->NSID = nsid;
+        command->MPTR = 0;
+        // For now write directly into the buffer. Probably not viable as we might need a PRP List!
+        command->PRP1 = reinterpret_cast<uint64_t>(buffer);
+
+        command->CDW10 = startBlock;
+        command->CDW11 = 0;
+
+        command->CDW12 = (0 << 31 | 0 << 30 | 0 << 26 | blockCount);
+        command->CDW13 = (0 << 7 | 0 << 6 | 0 << 4 | 0);
+        command->CDW14 = 0;
+        command->CDW15 = 0;
+
+        ioqueue->unlockQueue();
+        ioqueue->updateSubmissionTail();
+        ioqueue->waitUntilComplete(cid);
+        return blockCount;
+    }
+
     void NvmeController::setQueueTail(uint32_t id, uint32_t entry) {
         log.trace("Setting Queue[%d] Tail Doorebell to %d", id, entry);
         crBaseAddress[getQueueDoorbellOffset(id, 0)] = entry;

@@ -19,7 +19,7 @@ namespace Nvme {
     };
 
     uint32_t NvmeNamespace::read(uint8_t *buffer, uint32_t startSector, uint32_t sectorCount) {
-        return 0;
+        return nvme->performRead(id, buffer, startSector, sectorCount);
     };
 
     uint32_t NvmeNamespace::write(const uint8_t *buffer, uint32_t startSector, uint32_t sectorCount) {
