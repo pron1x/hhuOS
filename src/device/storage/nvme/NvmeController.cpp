@@ -13,6 +13,7 @@
 
 #include "lib/util/async/Thread.h"
 #include "lib/util/time/Timestamp.h"
+#include "lib/util/math/Math.h"
 
 namespace Device::Storage {
     Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
@@ -227,12 +228,11 @@ namespace Device::Storage {
             uint8_t lbaSlot = nsInfo->FLBAS & 0x0F;
             log.trace("NS[%d]: lbaSlot: %x", nsList[i], lbaSlot);
 
-            // FIXME: This logs as size 0 from namespace object - check why 0 is returned
             uint32_t blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
 
-            Nvme::NvmeNamespace* nsptr = new Nvme::NvmeNamespace(this, nsid, blocks, blockSize);
-            namespaces.add(nsptr);
+            namespaces.add(new Nvme::NvmeNamespace(this, nsid, blocks, blockSize));
 
+            // BUG: The blocksize logs as 0, debugger confirmed that the namespace object gets initialized and returns the correct value
             log.debug("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
                     nsid, namespaces.get(i)->getSectorCount(), namespaces.get(i)->getSectorSize());
             adminQueue.attachNamespace(this->id, nsid);
@@ -260,7 +260,13 @@ namespace Device::Storage {
         log.setLevel(log.INFO);
     }
 
-    uint32_t NvmeController::performRead(uint16_t nsid, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount) {
+    uint32_t NvmeController::performRead(Nvme::NvmeNamespace* ns, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount) {
+        // We don't need to do anything to read 0 blocks
+        if(blockCount == 0) {
+            return 0;
+        }
+        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
+
         /**
          * Read command uses DWORD10, DWORD11, DWORD12, DWORD13, DWORD14 and DWORD15.
          * DWORD10/DWORD11:
@@ -285,30 +291,78 @@ namespace Device::Storage {
          *      Expected Logical Block Application Tag Mask
          *      No end-to-end protection support, so cleared to 0
         */
-        ioqueue->lockQueue();
-        uint32_t cid = ioqueue->getSubmissionSlotNumber();
-        Nvme::NvmeQueue::NvmeCommand* command = ioqueue->getSubmissionEntry();
-        command->CDW0.CID = cid;
-        command->CDW0.FUSE = 0;
-        command->CDW0.PSDT = 0;
-        command->CDW0.OPC = 1;
+        // Calculate required Memory for data transfer
+        // This should fit into a uint32_t, otherwise buffer could not have been created
+        uint32_t totalBytesToRead = ns->getSectorSize() * blockCount;
+        // If bytesToRead is exactly 1 page, we write the physical Pointer into PRP1
+        // If bytesToRead is exactly or smaller than 2 pages, we write physical Pointer of page 1 into PRP1
+        //  and pointer of page 2 into PRP2
+        // If bytesToRead is greater than 2 pages, we create a PRP List and put the PRPList pointer into PRP1
+        //  and PRP2. 
 
-        command->NSID = nsid;
-        command->MPTR = 0;
-        // For now write directly into the buffer. Probably not viable as we might need a PRP List!
-        command->PRP1 = reinterpret_cast<uint64_t>(buffer);
+        // Since the blocks to read field in a command takes a 16 bit number, we need to calculate the amount of commands to send.
+        uint32_t commandsToSend = (blockCount - 1) / UINT16_MAX + 1; // Quick division and rounding up
+        uint32_t maxBytesPerCommand = UINT16_MAX * ns->getSectorSize();
+        uint32_t bytesLeft = totalBytesToRead;
+        uint32_t cStartBlock = startBlock;
+        for(uint32_t i = 0; i < commandsToSend; i++) {
+            uint8_t* data;
+            uint64_t prp1, prp2;
+            // Bytes to read in this command
+            uint32_t commandBytes = bytesLeft >= maxBytesPerCommand ? maxBytesPerCommand : bytesLeft;
+            // Create the PRP Entries
+            if(commandBytes <= 4096 * 2) {
+                // We do not need to create a PRP List. Fill PRP1, Fill PRP2 if two pages are required.
+                data = reinterpret_cast<uint8_t*>(memoryService.mapIO(bytesLeft));
+                prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data));
+                prp2 = bytesLeft <= 4096 ? 0 : reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data+4096));
+            } else {
+                // We need to create a PRP List and potentially account for multiple commands that need to be sent.
+                // Calculate the bytes to be read in this command
+                data = reinterpret_cast<uint8_t*>(memoryService.mapIO(commandBytes));
 
-        command->CDW10 = startBlock;
-        command->CDW11 = 0;
+                // TODO: Create the PRP List from data memory region!
+                // Calculate bytesLeft for next command.
+                bytesLeft -= maxBytesPerCommand;
+            }
 
-        command->CDW12 = (0 << 31 | 0 << 30 | 0 << 26 | blockCount);
-        command->CDW13 = (0 << 7 | 0 << 6 | 0 << 4 | 0);
-        command->CDW14 = 0;
-        command->CDW15 = 0;
 
-        ioqueue->unlockQueue();
-        ioqueue->updateSubmissionTail();
-        ioqueue->waitUntilComplete(cid);
+            // Fill the command
+            ioqueue->lockQueue();
+            uint32_t cid = ioqueue->getSubmissionSlotNumber();
+            Nvme::NvmeQueue::NvmeCommand* command = ioqueue->getSubmissionEntry();
+            command->CDW0.CID = cid;
+            command->CDW0.FUSE = 0;
+            command->CDW0.PSDT = 0;
+            command->CDW0.OPC = 1;
+
+            command->NSID = ns->id;
+            command->MPTR = 0;
+            // For now write directly into the buffer. Probably not viable as we might need a PRP List!
+            command->PRP1 = prp1;
+            command->PRP2 = prp2;
+
+            command->CDW10 = cStartBlock;
+            command->CDW11 = 0;
+
+            command->CDW12 = (0 << 31 | 0 << 30 | 0 << 26 | blockCount);
+            command->CDW13 = (0 << 7 | 0 << 6 | 0 << 4 | 0);
+            command->CDW14 = 0;
+            command->CDW15 = 0;
+
+            ioqueue->unlockQueue();
+            ioqueue->updateSubmissionTail();
+            ioqueue->waitUntilComplete(cid);
+            // Copy the data from data Pointer to buffer, taking into account number of commands already sent.
+            // This can (and should?) be simpler by using the 'Address' template and .copyRange method. Otherwise simplify with uint64_t pointers
+            for(uint32_t j = 0; j < commandBytes; j++) {
+                buffer[i * maxBytesPerCommand + j] = data[j];
+            }
+            // Free data pointer. Can't reuse due to potential size differences.
+            // Potentially possible to reuse same pointer and avoid getting/freeing mem in loop by fix-sized reads.
+            memoryService.freeUserMemory(data);
+        }
+        // All commands sent and data read, return number of blocks read (all).
         return blockCount;
     }
 

@@ -8,6 +8,7 @@ namespace Device::Storage {
 namespace Nvme {
     class NvmeNamespace : StorageDevice {
         public:
+        const uint32_t id;
 
         explicit NvmeNamespace(NvmeController* nvme, uint32_t id, uint64_t blocks, uint32_t blocksize);
 
@@ -23,7 +24,6 @@ namespace Nvme {
 
         private:
         NvmeController* nvme;
-        uint32_t id;
         uint64_t blocks;
         uint32_t blockSize;
     };

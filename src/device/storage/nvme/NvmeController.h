@@ -64,7 +64,7 @@ namespace Device::Storage {
 
         uint16_t getControllerId() { return id; }
 
-        uint32_t performRead(uint16_t nsid, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount);
+        uint32_t performRead(Nvme::NvmeNamespace* ns, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount);
 
         void plugin() override;
 

@@ -3,9 +3,8 @@
 namespace Device::Storage {
 namespace Nvme {
 
-    NvmeNamespace::NvmeNamespace(NvmeController* nvme, uint32_t id, uint64_t blocks, uint32_t blocksize) {
+    NvmeNamespace::NvmeNamespace(NvmeController* nvme, uint32_t id, uint64_t blocks, uint32_t blocksize) : id(id) {
         this->nvme = nvme;
-        this->id = id;
         this->blocks = blocks;
         this->blockSize = blocksize;
     }
@@ -19,7 +18,7 @@ namespace Nvme {
     };
 
     uint32_t NvmeNamespace::read(uint8_t *buffer, uint32_t startSector, uint32_t sectorCount) {
-        return nvme->performRead(id, buffer, startSector, sectorCount);
+        return nvme->performRead(this, buffer, startSector, sectorCount);
     };
 
     uint32_t NvmeNamespace::write(const uint8_t *buffer, uint32_t startSector, uint32_t sectorCount) {
