@@ -321,7 +321,29 @@ namespace Device::Storage {
                 // Calculate the bytes to be read in this command
                 data = reinterpret_cast<uint8_t*>(memoryService.mapIO(commandBytes));
 
-                // TODO: Create the PRP List from data memory region!
+                // Calculate amount of page pointers we're adding to the list
+                uint32_t dataPages = (commandBytes - 1) / 4096 + 1; // Quick division and rounding up
+                // Allocate the prp list memory
+                // FIXME: prpList memory possibly needs extra space for prp list page linking entries!
+                // TODO: Free PRP List memory!
+                uint64_t* prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO(dataPages * 4096));
+                uint32_t pageSlot = 0;
+                // Add pointers to the physical pages to the prp list
+                for(uint32_t p = 0; p < dataPages; p++) {
+                    // If we cross a prp list memory page boundary, we need to link to the next page if more pages need to be added
+                    if(p % (4096/sizeof(uint64_t)) == 0 && p+1 != dataPages) { // p mod amount of pointers per memory page AND not the last pointer that is added
+                        // Get the next necessary prp list page pointer. prplist + current page / sizeof(uint64_t) multiplied by pointers per page
+                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList + (p / sizeof(uint64_t)) * (4096 / sizeof(uint64_t))));
+                        // Add data memory page to prp list
+                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + (4096 * p)));
+                    } else {
+                        // Add data memory page to prp list
+                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + (4096 * p)));
+                    }
+                }
+                prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList));
+                prp2 = prpList[0]; // First memory page
+
                 // Calculate bytesLeft for next command.
                 bytesLeft -= maxBytesPerCommand;
             }
@@ -338,7 +360,7 @@ namespace Device::Storage {
 
             command->NSID = ns->id;
             command->MPTR = 0;
-            // For now write directly into the buffer. Probably not viable as we might need a PRP List!
+            
             command->PRP1 = prp1;
             command->PRP2 = prp2;
 
