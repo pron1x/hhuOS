@@ -112,6 +112,8 @@ namespace Device::Storage {
         static const constexpr uint8_t SHST_NORMAL_OPERATION = 0b00;
         static const constexpr uint8_t SHST_OCCURING = 0b01;
         static const constexpr uint8_t SHST_COMPLETE = 0b10;
+
+        static const constexpr uint32_t PAGE_SIZE = 4096;
         
 
         // Enums / Structs for NVMe Controllers

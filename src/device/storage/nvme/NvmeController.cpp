@@ -311,34 +311,38 @@ namespace Device::Storage {
             // Bytes to read in this command
             uint32_t commandBytes = bytesLeft >= maxBytesPerCommand ? maxBytesPerCommand : bytesLeft;
             // Create the PRP Entries
-            if(commandBytes <= 4096 * 2) {
+            if(commandBytes <= PAGE_SIZE * 2) {
                 // We do not need to create a PRP List. Fill PRP1, Fill PRP2 if two pages are required.
                 data = reinterpret_cast<uint8_t*>(memoryService.mapIO(bytesLeft));
                 prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data));
-                prp2 = bytesLeft <= 4096 ? 0 : reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data+4096));
+                prp2 = bytesLeft <= PAGE_SIZE ? 0 : reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data+PAGE_SIZE));
             } else {
                 // We need to create a PRP List and potentially account for multiple commands that need to be sent.
                 // Calculate the bytes to be read in this command
                 data = reinterpret_cast<uint8_t*>(memoryService.mapIO(commandBytes));
 
                 // Calculate amount of page pointers we're adding to the list
-                uint32_t dataPages = (commandBytes - 1) / 4096 + 1; // Quick division and rounding up
+                uint32_t dataPages = (commandBytes - 1) / PAGE_SIZE + 1; // Quick division and rounding up
+                uint32_t pointersPerPage = PAGE_SIZE / sizeof(uint64_t);
+                // Since we need to account for prp list linking, only PAGE_SIZE/sizeof(uint64_t) - 1 data page entries fit per prp list page.
+                // (dataPages/pointersPerPage)*sizeof(uint64_t) + (datapages * sizeof(uint64_t)) bytes need to be requested. -> Calculate the pages needed to fit all datapages -> Amount of linked entries
+                // Add the raw memory needed to add all the pointers to data pages.
                 // Allocate the prp list memory
-                // FIXME: prpList memory possibly needs extra space for prp list page linking entries!
                 // TODO: Free PRP List memory!
-                uint64_t* prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO(dataPages * 4096));
+                uint64_t* prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO((dataPages/pointersPerPage)*sizeof(uint64_t) + dataPages * sizeof(uint64_t)));
                 uint32_t pageSlot = 0;
                 // Add pointers to the physical pages to the prp list
                 for(uint32_t p = 0; p < dataPages; p++) {
                     // If we cross a prp list memory page boundary, we need to link to the next page if more pages need to be added
-                    if(p % (4096/sizeof(uint64_t)) == 0 && p+1 != dataPages) { // p mod amount of pointers per memory page AND not the last pointer that is added
-                        // Get the next necessary prp list page pointer. prplist + current page / sizeof(uint64_t) multiplied by pointers per page
-                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList + (p / sizeof(uint64_t)) * (4096 / sizeof(uint64_t))));
+                    if((pageSlot + 1) % pointersPerPage == 0 && p + 1 != dataPages) { // next slot is first of page AND not the last pointer that is added
+                        // The current slot should be the last of the page, so the pageSlot + 1 should point to the beginning of the next page
+                        prpList[pageSlot] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList + (pageSlot + 1)));
+                        pageSlot++;
                         // Add data memory page to prp list
-                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + (4096 * p)));
+                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + (PAGE_SIZE * p)));
                     } else {
                         // Add data memory page to prp list
-                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + (4096 * p)));
+                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + (PAGE_SIZE * p)));
                     }
                 }
                 prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList));
