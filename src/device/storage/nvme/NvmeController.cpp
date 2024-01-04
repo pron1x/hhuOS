@@ -267,30 +267,6 @@ namespace Device::Storage {
         }
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
 
-        /**
-         * Read command uses DWORD10, DWORD11, DWORD12, DWORD13, DWORD14 and DWORD15.
-         * DWORD10/DWORD11:
-         *      Address of starting logical block.
-         *      DWORD10 bits 31:00
-         *      DWORD11 bits 63:32
-         * DWORD12:
-         *      15:00 Number of blocks to be read
-         *      29:26 Protection Information Field, unused in this implementation
-         *      30    Force Unit Access, unused and cleared to 0
-         *      31    Limited Retry, Cleared to 0, controller applies all available error recovery to return data
-         * DWORD13:
-         *      03:00 Access Frequency: Cleared to 0 to provide no frequency information
-         *      05:04 Access Latency: Cleared to 0 to provide no latency information
-         *      06    Sequential Request: If 1, command is part of sequential read that includes multiple reads
-         *      07    Incompressibe: Cleared to 0 to provide no compression information
-         * DWORD14:
-         *      Expected Initial Logical Block Reference Tag
-         *      No end-to-end protection support, so cleared to 0
-         * DWORD15
-         *      Expected Logical Block Application Tag
-         *      Expected Logical Block Application Tag Mask
-         *      No end-to-end protection support, so cleared to 0
-        */
         // Calculate required Memory for data transfer
         // This should fit into a uint32_t, otherwise buffer could not have been created
         uint32_t totalBytesToRead = ns->getSectorSize() * blockCount;
@@ -301,8 +277,9 @@ namespace Device::Storage {
         //  and PRP2. 
 
         // Since the blocks to read field in a command takes a 16 bit number, we need to calculate the amount of commands to send.
-        uint32_t commandsToSend = (blockCount - 1) / UINT16_MAX + 1; // Quick division and rounding up
-        uint32_t maxBytesPerCommand = UINT16_MAX * ns->getSectorSize();
+        uint32_t commandsToSend = (blockCount - 1) / MAX_BLOCKS_IO + 1; // Quick division and rounding up
+        uint32_t maxBytesPerCommand = MAX_BLOCKS_IO * ns->getSectorSize(); // Blocks are zero based, maximum of 2^16 blocks per read/write
+
         uint32_t bytesLeft = totalBytesToRead;
         uint32_t cStartBlock = startBlock;
         for(uint32_t i = 0; i < commandsToSend; i++) {
@@ -352,7 +329,30 @@ namespace Device::Storage {
                 bytesLeft -= maxBytesPerCommand;
             }
 
-
+            /**
+             * Read command uses DWORD10, DWORD11, DWORD12, DWORD13, DWORD14 and DWORD15.
+             * DWORD10/DWORD11:
+             *      Address of starting logical block.
+             *      DWORD10 bits 31:00
+             *      DWORD11 bits 63:32
+             * DWORD12:
+             *      15:00 Number of blocks to be read
+             *      29:26 Protection Information Field, unused in this implementation
+             *      30    Force Unit Access, unused and cleared to 0
+             *      31    Limited Retry, Cleared to 0, controller applies all available error recovery to return data
+             * DWORD13:
+             *      03:00 Access Frequency: Cleared to 0 to provide no frequency information
+             *      05:04 Access Latency: Cleared to 0 to provide no latency information
+             *      06    Sequential Request: If 1, command is part of sequential read that includes multiple reads
+             *      07    Incompressibe: Cleared to 0 to provide no compression information
+             * DWORD14:
+             *      Expected Initial Logical Block Reference Tag
+             *      No end-to-end protection support, so cleared to 0
+             * DWORD15:
+             *      Expected Logical Block Application Tag
+             *      Expected Logical Block Application Tag Mask
+             *      No end-to-end protection support, so cleared to 0
+            */
             // Fill the command
             ioqueue->lockQueue();
             uint32_t cid = ioqueue->getSubmissionSlotNumber();
@@ -371,7 +371,7 @@ namespace Device::Storage {
             command->CDW10 = cStartBlock;
             command->CDW11 = 0;
 
-            command->CDW12 = (0 << 31 | 0 << 30 | 0 << 26 | blockCount);
+            command->CDW12 = (0 << 31 | 0 << 30 | 0 << 26 | ((commandBytes / ns->getSectorSize())-1));
             command->CDW13 = (0 << 7 | 0 << 6 | 0 << 4 | 0);
             command->CDW14 = 0;
             command->CDW15 = 0;
@@ -387,8 +387,119 @@ namespace Device::Storage {
             // Free data pointer. Can't reuse due to potential size differences.
             // Potentially possible to reuse same pointer and avoid getting/freeing mem in loop by fix-sized reads.
             memoryService.freeUserMemory(data);
+            // Increment cStartBlock by blocks read in this command
+            cStartBlock += commandBytes / ns->getSectorSize();
         }
         // All commands sent and data read, return number of blocks read (all).
+        return blockCount;
+    }
+
+    uint32_t NvmeController::performWrite(Nvme::NvmeNamespace* ns, const uint8_t* buffer, uint32_t startBlock, uint32_t blockCount) {
+        // If no blocks need to be written, we can return immediately
+        if(blockCount == 0) {
+            return 0;
+        }
+        auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
+        // Calculate total write size
+        uint32_t commandsToSend = (blockCount - 1) / MAX_BLOCKS_IO + 1;
+        uint32_t totalBytesToWrite = blockCount * ns->getSectorSize();
+        uint32_t maxBytesPerCommand = MAX_BLOCKS_IO * ns->getSectorSize();
+
+        uint32_t bytesLeft = totalBytesToWrite;
+        uint32_t cStartBlock = startBlock;
+        uint8_t* data = reinterpret_cast<uint8_t*>(memoryService.mapIO(totalBytesToWrite));
+        // Copy buffer to data memory to ensure page alignment
+        for(uint32_t i = 0; i < totalBytesToWrite; i++) {
+            data[i] = buffer[i];
+        }
+
+        for(uint32_t i = 0; i < commandsToSend; i++) {
+            uint64_t prp1, prp2;
+            // Bytes to read in this command
+            uint32_t commandBytes = bytesLeft >= maxBytesPerCommand ? maxBytesPerCommand : bytesLeft;
+            // Create the PRP Entries
+            if(commandBytes <= PAGE_SIZE * 2) {
+                // We do not need to create a PRP List. Fill PRP1, Fill PRP2 if two pages are required.
+                prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data));
+                prp2 = bytesLeft <= PAGE_SIZE ? 0 : reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data+PAGE_SIZE));
+            } else {
+                // We need to create a PRP List and potentially account for multiple commands that need to be sent.
+                // Calculate amount of page pointers we're adding to the list
+                uint32_t dataPages = (commandBytes - 1) / PAGE_SIZE + 1; // Quick division and rounding up
+                uint32_t pointersPerPage = PAGE_SIZE / sizeof(uint64_t);
+                // Since we need to account for prp list linking, only PAGE_SIZE/sizeof(uint64_t) - 1 data page entries fit per prp list page.
+                // (dataPages/pointersPerPage)*sizeof(uint64_t) + (datapages * sizeof(uint64_t)) bytes need to be requested. -> Calculate the pages needed to fit all datapages -> Amount of linked entries
+                // Add the raw memory needed to add all the pointers to data pages.
+                // Allocate the prp list memory
+                // TODO: Free PRP List memory!
+                uint64_t* prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO((dataPages/pointersPerPage)*sizeof(uint64_t) + dataPages * sizeof(uint64_t)));
+                uint32_t pageSlot = 0;
+                // Add pointers to the physical pages to the prp list
+                for(uint32_t p = 0; p < dataPages; p++) {
+                    // If we cross a prp list memory page boundary, we need to link to the next page if more pages need to be added
+                    if((pageSlot + 1) % pointersPerPage == 0 && p + 1 != dataPages) { // next slot is first of page AND not the last pointer that is added
+                        // The current slot should be the last of the page, so the pageSlot + 1 should point to the beginning of the next page
+                        prpList[pageSlot] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList + (pageSlot + 1)));
+                        pageSlot++;
+                        // Add data memory page to prp list
+                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + i * maxBytesPerCommand + (PAGE_SIZE * p)));
+                    } else {
+                        prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + i * maxBytesPerCommand + (PAGE_SIZE * p)));
+                    }
+                }
+                prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList));
+                prp2 = prpList[0]; // First memory page
+
+                // Calculate bytesLeft for next command.
+                bytesLeft -= maxBytesPerCommand;
+            }
+
+            ioqueue->lockQueue();
+            uint32_t cid = ioqueue->getSubmissionSlotNumber();
+            Nvme::NvmeQueue::NvmeCommand* command = ioqueue->getSubmissionEntry();
+            command->CDW0.CID = cid;
+            command->CDW0.FUSE = 0;
+            command->CDW0.PSDT = 0;
+            command->CDW0.OPC = 1;
+
+            command->MPTR = 0;
+            command->PRP1 = prp1;
+            command->PRP2 = prp2;
+
+            // DWORD10 + DWORD11
+            // 64 bit address of starting LBA
+            command->CDW10 = startBlock;
+            command->CDW11 = 0;
+
+            // DWORD12
+            // 31: Limited Retry - Clear to 0 to apply all available recovery methods
+            // 30: Force Unit Access - Cleared to 0 for no effect
+            // 29:26: Protection Information Field - Cleared to 0, no protection support
+            // 23:20: Directive Type - Cleared to 0 for no support
+            // 15:00: Number of blocks to be written
+            command->CDW12 = (0 << 31 | 0 << 30 | 0 << 26 | 0 << 20 | ((commandBytes / ns->getSectorSize())-1));
+            // DWORD13
+            // 31:16: Directive Specific - Cleared to 0, no protection support
+            // Data Management
+            // 07: Incompressible - Cleared to 0, no compression information
+            // 06: Sequential Request - Cleared to 0 for no information
+            // 05:04: Access Latency - Cleared to 0, no information given
+            // 03:00: Access Frequency - Cleared to 0, no information given
+            command->CDW13 = (0 << 16 | 0 << 7 | 0 << 6 | 0b00 << 4 | 0x0 << 3);
+            // DWORD14
+            // Initial Logical Block Reference Tag - Cleared to 0, no protection support
+            command->CDW14 = 0;
+            // DWORD15 - Logical Block Application Tag Mask and Logical Block Application Tag
+            // Cleared to 0, no protection support.
+            command->CDW15 = 0;
+
+            ioqueue->unlockQueue();
+            ioqueue->updateSubmissionTail();
+            ioqueue->waitUntilComplete(cid);
+            cStartBlock += commandBytes / ns->getSectorSize();
+        }
+
+        memoryService.freeUserMemory(data);
         return blockCount;
     }
 

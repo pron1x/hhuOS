@@ -66,6 +66,8 @@ namespace Device::Storage {
 
         uint32_t performRead(Nvme::NvmeNamespace* ns, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount);
 
+        uint32_t performWrite(Nvme::NvmeNamespace* ns, const uint8_t* buffer, uint32_t startBlock, uint32_t blockCount);
+
         void plugin() override;
 
         void trigger(const Kernel::InterruptFrame &frame) override;
@@ -114,6 +116,7 @@ namespace Device::Storage {
         static const constexpr uint8_t SHST_COMPLETE = 0b10;
 
         static const constexpr uint32_t PAGE_SIZE = 4096;
+        static const constexpr uint32_t MAX_BLOCKS_IO = UINT16_MAX + 1;
         
 
         // Enums / Structs for NVMe Controllers
