@@ -6,6 +6,7 @@
 #include "kernel/system/System.h"
 #include "kernel/service/MemoryService.h"
 #include "kernel/service/InterruptService.h"
+#include "kernel/service/StorageService.h"
 #include "kernel/interrupt/InterruptVector.h"
 
 #include "device/pci/Pci.h"
@@ -247,6 +248,10 @@ namespace Device::Storage {
 
         memoryService.freeUserMemory(info);
         memoryService.freeUserMemory(nsInfo);
+
+        for(auto* ns : namespaces) {
+            Kernel::System::getService<Kernel::StorageService>().registerDevice(ns, "nvme");
+        }
     }
 
     void NvmeController::initializeAvailableControllers() {

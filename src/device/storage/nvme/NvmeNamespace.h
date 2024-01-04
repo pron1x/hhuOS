@@ -6,7 +6,7 @@
 
 namespace Device::Storage {
 namespace Nvme {
-    class NvmeNamespace : StorageDevice {
+    class NvmeNamespace : public StorageDevice {
         public:
         const uint32_t id;
 
