@@ -54,6 +54,12 @@ namespace Device::Storage {
         lockQueue();
         // Set Interrupt Mask for this queue
         nvme->setInterruptMask(id);
+        // If the waiting flag is not set, there shouldn't be any entries to check!
+        if(!waiting) {
+            nvme->clearInterruptMask(id);
+            unlockQueue();
+            return;
+        }
         // Loop through all new entries in completion queue, indicated by phase bit
         while(compQueue[compQueueHead].DW3.P == phase) {
             log.debug("[Queue %d] Status field for command[%d]: %x", id, compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
