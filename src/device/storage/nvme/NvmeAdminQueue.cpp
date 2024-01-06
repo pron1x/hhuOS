@@ -57,12 +57,18 @@ namespace Device::Storage {
         submissionEntry->CDW0.PSDT = 0;
         submissionEntry->CDW0.OPC = OPC_NS_ATTACHMENT; // Command Namespace Attachment
         submissionEntry->NSID = nsid;
-        submissionEntry->CDW10 = 0; // Controller Attach
+        submissionEntry->CDW10 = 0; // Controller Attach (0), Controller Detach (1)
         submissionEntry->PRP1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(controllerList));
         
         queue->unlockQueue();
         queue->updateSubmissionTail();
-        queue->waitUntilComplete(slot);
+        NvmeQueue::NvmeCompletionEntry* result = queue->waitUntilComplete(slot);
+        uint8_t statusCode = result->DW3.SF & 0xFF;
+        uint8_t statusCodeType = (result->DW3.SF >> 8) & 0b111;
+        uint8_t retryDelay = (result->DW3.SF >> 11) & 0b11;
+        uint8_t more = (result->DW3.SF >> 13) & 1;
+        uint8_t noRetry = (result->DW3.SF >> 14) & 1;
+        log.debug("Status Code: %x, Status Code Type: %x, Retry Delay: %x, More: %x, No Retry: %x", statusCode, statusCodeType, retryDelay, more, noRetry);
         memoryService.freeUserMemory(controllerList);
     }
 
@@ -78,7 +84,7 @@ namespace Device::Storage {
         command->CDW0.PSDT = 0;
         command->CDW0.OPC = OPC_CREATE_IO_COMPLETION_QUEUE;
         // PRP Entry 1 contains base memory address, since we use physical contigous memory regions
-        command->PRP1 = queue->getCompletionPhysicalAddress();
+        command->PRP1 = ioqueue->getCompletionPhysicalAddress();
         // DWORD10 contains the queue size and identifier
         command->CDW10 = (size << 16 | queueId );
         // DWORD11 contains interrupt vector, interrupt enable and physical contiguity information
@@ -97,7 +103,7 @@ namespace Device::Storage {
         command->CDW0.PSDT = 0;
         command->CDW0.OPC = OPC_CREATE_IO_SUBMISSION_QUEUE;
         // PRP Entry 1 contains base memory address, since we use physical contigous memory regions
-        command->PRP1 = queue->getSubmissionPhysicalAddress();
+        command->PRP1 = ioqueue->getSubmissionPhysicalAddress();
         // DWORD10 contains queue size and identifier
         command->CDW10 = (size << 16 | queueId );
         // DWORD11 contains completion queue identifier, queue priority and physical contiguity information
