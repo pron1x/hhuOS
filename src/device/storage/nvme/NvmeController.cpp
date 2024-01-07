@@ -203,6 +203,9 @@ namespace Device::Storage {
         // TODO: Check why controller ID field returns 0
         id = reinterpret_cast<uint16_t*>(info)[39];
         
+        // Create the first I/O Queue Pair
+        ioqueue = adminQueue.createNewQueue(1, NVME_QUEUE_ENTRIES);
+
         // Reuse the info memory block for namespace list
         uint32_t* nsList = reinterpret_cast<uint32_t*>(info);
 
@@ -239,12 +242,6 @@ namespace Device::Storage {
             adminQueue.attachNamespace(this->id, nsid);
             log.debug("Attached namespace.");
         }
-
-        // Create the first I/O Queue Pair
-        // FIXME: Enabled interrupts probably cause issues, check
-        // HACK: According to OSDevWiki I/O Queue should be created BEFORE namespace identification/attachment.
-        // This causes interrupt flodding (for some unknown reason).
-        ioqueue = adminQueue.createNewQueue(1, NVME_QUEUE_ENTRIES);
 
         memoryService.freeUserMemory(info);
         memoryService.freeUserMemory(nsInfo);
