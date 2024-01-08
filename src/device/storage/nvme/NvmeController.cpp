@@ -362,7 +362,7 @@ namespace Device::Storage {
             command->CDW0.CID = cid;
             command->CDW0.FUSE = 0;
             command->CDW0.PSDT = 0;
-            command->CDW0.OPC = 1;
+            command->CDW0.OPC = 0x2;
 
             command->NSID = ns->id;
             command->MPTR = 0;
@@ -380,7 +380,13 @@ namespace Device::Storage {
 
             ioqueue->unlockQueue();
             ioqueue->updateSubmissionTail();
-            ioqueue->waitUntilComplete(cid);
+            auto* result = ioqueue->waitUntilComplete(cid);
+            uint8_t statusCode = result->DW3.SF & 0xFF;
+            uint8_t statusCodeType = (result->DW3.SF >> 8) & 0b111;
+            uint8_t retryDelay = (result->DW3.SF >> 11) & 0b11;
+            uint8_t more = (result->DW3.SF >> 13) & 1;
+            uint8_t noRetry = (result->DW3.SF >> 14) & 1;
+            log.debug("Status Code: %x, Status Code Type: %x, Retry Delay: %x, More: %x, No Retry: %x", statusCode, statusCodeType, retryDelay, more, noRetry);
             // Copy the data from data Pointer to buffer, taking into account number of commands already sent.
             // This can (and should?) be simpler by using the 'Address' template and .copyRange method. Otherwise simplify with uint64_t pointers
             for(uint32_t j = 0; j < commandBytes; j++) {
