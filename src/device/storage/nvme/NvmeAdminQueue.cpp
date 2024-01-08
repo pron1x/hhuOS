@@ -40,7 +40,12 @@ namespace Device::Storage {
         queue->waitUntilComplete(slot);
     }
 
-    // FIXME: The command cancels with Error 0x02!
+    /**
+     * Attaches a namespace to the controller. This command will complete succesfully if the namespace is not yet attached to the controller.
+     * In the likely case that the namespace is already attached to the controller, it will return error code 0x18.
+     * If namespace management/attachment commands are not supported or nvme subsystems are not used by the controller,
+     * the command will return error code 0x2. Most of the times the namespaces are already attached if that happens.
+    */
     void NvmeAdminQueue::attachNamespace(uint16_t controllerId, uint32_t nsid) {
         // Prepare Controller List
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
@@ -59,6 +64,7 @@ namespace Device::Storage {
         submissionEntry->NSID = nsid;
         submissionEntry->CDW10 = 0; // Controller Attach (0), Controller Detach (1)
         submissionEntry->PRP1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(controllerList));
+        submissionEntry->PRP2 = 0;
         
         queue->unlockQueue();
         queue->updateSubmissionTail();
