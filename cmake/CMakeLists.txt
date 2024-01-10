@@ -133,3 +133,4 @@ add_subdirectory(books)
 
 add_subdirectory(hdd0)
 add_subdirectory(floppy0)
+add_subdirectory(nvme0)

@@ -16,14 +16,14 @@
 
 cmake_minimum_required(VERSION 3.14)
 
-project(grub)
+project(nvme0)
 message(STATUS "Project " ${PROJECT_NAME})
 
-add_custom_command(OUTPUT "${HHUOS_ROOT_DIR}/hhuOS.iso"
-        COMMAND /bin/rm -f "${HHUOS_ROOT_DIR}/hhuOS.img"
-        COMMAND /bin/cp "$<TARGET_FILE:system>" "${HHUOS_ROOT_DIR}/loader/grub/boot/hhuOS.bin"
-        COMMAND /bin/cp "${CMAKE_BINARY_DIR}/hhuOS.initrd" "${HHUOS_ROOT_DIR}/loader/grub/boot/hhuOS.initrd"
-        COMMAND grub-mkrescue "/usr/lib/grub/i386-pc" "/usr/lib/grub/i386-efi" -o "${HHUOS_ROOT_DIR}/hhuOS-grub.iso" "${HHUOS_ROOT_DIR}/loader/grub/"
-        DEPENDS system initrd floppy0 hdd0)
+add_custom_command(OUTPUT "${HHUOS_ROOT_DIR}/nvme0.img"
+        COMMAND /bin/mkdir -p "${HHUOS_ROOT_DIR}/nvme0/img/bin"
+        COMMAND /bin/cp "$<TARGET_FILE:echo>" "${HHUOS_ROOT_DIR}/nvme0/img/bin/echo"
+        COMMAND /bin/cp -r "${CMAKE_BINARY_DIR}/books" "${HHUOS_ROOT_DIR}/nvme0/img/"
+        WORKING_DIRECTORY ${HHUOS_ROOT_DIR}/nvme0 COMMAND ${HHUOS_ROOT_DIR}/nvme0/build.sh
+        DEPENDS echo)
 
-add_custom_target(${PROJECT_NAME} DEPENDS system initrd floppy0 hdd0 nvme0 "${HHUOS_ROOT_DIR}/hhuOS.iso")
+add_custom_target(${PROJECT_NAME} DEPENDS echo "${HHUOS_ROOT_DIR}/nvme0.img")

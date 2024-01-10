@@ -6,6 +6,8 @@ floppy0/img/bin
 floppy0/img/books
 hdd0/img/bin
 hdd0/img/user
+nvme0/img/bin
+nvme0/img/books
 hhuOS.bin
 hhuOS.initrd
 towboot-ia32.efi
