@@ -386,7 +386,11 @@ namespace Device::Storage {
             uint8_t retryDelay = (result->DW3.SF >> 11) & 0b11;
             uint8_t more = (result->DW3.SF >> 13) & 1;
             uint8_t noRetry = (result->DW3.SF >> 14) & 1;
-            log.debug("Status Code: %x, Status Code Type: %x, Retry Delay: %x, More: %x, No Retry: %x", statusCode, statusCodeType, retryDelay, more, noRetry);
+            log.info("Status Code: %x, Status Code Type: %x, Retry Delay: %x, More: %x, No Retry: %x", statusCode, statusCodeType, retryDelay, more, noRetry);
+            if(statusCode != 0) {
+                memoryService.freeUserMemory(data);
+                return 0;
+            }
             // Copy the data from data Pointer to buffer, taking into account number of commands already sent.
             // This can (and should?) be simpler by using the 'Address' template and .copyRange method. Otherwise simplify with uint64_t pointers
             for(uint32_t j = 0; j < commandBytes; j++) {
