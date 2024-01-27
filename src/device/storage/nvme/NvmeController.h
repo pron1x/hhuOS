@@ -22,6 +22,12 @@ namespace Device::Storage {
 
 namespace Device::Storage {
     
+    /**
+     * @brief Simple driver implementation for NVMe Controllers. Implements Version 1.4 specification.
+     * Undefined behavior for NVMe Subsystems with more than one Controller, undefined behavior for shared namespaces.
+     * Implements basic Controller Configuration and Initialization, supports basic read and write funtionality.
+     * The initialize() method needs to be called before controller can be used to access namespaces! 
+    */
     class NvmeController : public Kernel::InterruptHandler {
         public:
 
@@ -29,47 +35,85 @@ namespace Device::Storage {
 
         ~NvmeController() override = default;
 
+        /**
+         * @brief Scans the PCI Bus for NVMe Controllers and initializes them.
+        */
         static void initializeAvailableControllers();
 
+        /**
+         * @brief Initializes the Controller by attaching namespaces and creating an I/O Queue Pair
+        */
         void initialize();
 
-        /** Sets the Admin Queue Registers Base Addresses for Submission and Completion Queues*/
+        /** 
+         * @brief Sets the Admin Queue Registers Base Addresses for Submission and Completion Queues
+        */
         void setAdminQueueRegisters(uint64_t submission, uint64_t completion);
 
         /**
-         * Updates the Tail Doorbell Register for the specified queue to the new entry
+         * @brief Updates the Tail Doorbell Register for the specified queue to the new entry
          * @param id Queue id for which to update the tail register
          * @param entry Entry to write into the Tail Doorbell Register
-         * TODO: Update function name to be more precise (Submission queues use tail doorbell register)
         */
         void setQueueTail(uint32_t id, uint32_t entry);
 
         /**
-         * Updates the Head Doorbell Register for the specified queue to the new entry
+         * @brief Updates the Head Doorbell Register for the specified queue to the new entry
          * @param id Queue id for which to update the tail register
          * @param entry Entry to write into the Head Doorbell Register
         */
         void setQueueHead(uint32_t id, uint32_t entry);
 
         /**
-         * Registers a queue object to be called when the controller receives an interrupt
+         * @brief Registers a queue object to be called when the controller receives an interrupt
          * @param id Id of the queue
          * @param queue The queue object which will be called to check it's completion entries
         */
         void registerQueueInterruptHandler(uint32_t id, Nvme::NvmeQueue* queue);
 
+        /**
+         * @brief Sets the Interrupt Mask for the specified Completion Queue to disable Interrupts for that Queue
+        */
         void setInterruptMask(uint32_t queueId);
 
+        /**
+         * @brief Clears the Interrupt Mask for the specified Completion Queue to enable Interrupts again
+        */
         void clearInterruptMask(uint32_t queueId);
 
+        /**
+         * @returns The NVM Subsystem unique ID of Controller
+        */
         uint16_t getControllerId() { return id; }
 
+        /**
+         * @brief Submits a read command to the I/O queue and copies the read bytes into the buffer.
+         * @param ns A pointer to the namespace to read from
+         * @param buffer A pointer to an output buffer to copy the read data into
+         * @param startBlock The logical block address of the first block to read
+         * @param blockCount The number of logical blocks to read
+         * @returns The number of blocks read.
+        */
         uint32_t performRead(Nvme::NvmeNamespace* ns, uint8_t* buffer, uint32_t startBlock, uint32_t blockCount);
 
+        /**
+         * @brief Submits a write command to the I/O queue to write the data from the buffer to the namespace.
+         * @param ns A pointer to the namespace to write to
+         * @param buffer A pointer to the data that is being written to the namespace
+         * @param startBlock The logical block address of the first block to write to
+         * @param blockCount The number of logical blocks to write
+         * @returns The number of blocks written
+        */
         uint32_t performWrite(Nvme::NvmeNamespace* ns, const uint8_t* buffer, uint32_t startBlock, uint32_t blockCount);
 
+        /**
+         * @brief Plugs the Controller into the InterruptService to handle Interrupts
+        */
         void plugin() override;
 
+        /**
+         * @brief Interrupt handler that is called by the InterruptService. Scans all queues for new entries
+        */
         void trigger(const Kernel::InterruptFrame &frame) override;
 
         
@@ -78,26 +122,28 @@ namespace Device::Storage {
         static Kernel::Logger log;
         const Device::PciDevice* pci;
 
+        // List of queues to scan for new entries on Interrupt, NOT an I/O queue list!
         Util::ArrayList<Nvme::NvmeQueue*> queues;
         Util::ArrayList<Nvme::NvmeNamespace*> namespaces;
 
         Nvme::NvmeAdminQueue adminQueue;
         Nvme::NvmeQueue* ioqueue;
 
-        /**
-         * hhuOS is 32bit, if access to 64 bit registers is required, cast to 64bit pointer.
-        */
         uint16_t id; 
+        // Base address of memory mapped controller registers. hhuOS is 32bit, if access to 64 bit registers is required, cast to 64bit pointer.
         uint32_t* crBaseAddress;
         uint32_t doorbellStride;
         uint32_t timeout;
-        uint16_t maxQueueEnties;
+        uint16_t maxQueueEntries;
         uint32_t minPageSize;
         uint32_t maxPageSize;
         uint32_t maxDataTransfer;
 
         static const uint32_t NVME_QUEUE_ENTRIES = 2;  // Define queue size
 
+        /**
+         * @brief Maps memory mapped registers into memory
+        */
         void mapBaseAddressRegister(const PciDevice &pciDevice);
 
         /**
@@ -108,7 +154,6 @@ namespace Device::Storage {
         uint32_t getQueueDoorbellOffset(const uint32_t y, const uint8_t completionQueue);
 
         // Constants
-
         static const constexpr uint8_t PCI_SUBCLASS_NVME = 0x08;
         static const constexpr uint8_t SHN_ABRUPT = 0b10;
         static const constexpr uint8_t SHST_NORMAL_OPERATION = 0b00;

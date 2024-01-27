@@ -52,7 +52,7 @@ namespace Device::Storage {
                 lcap.bits.MQES, lcap.bits.CQR, lcap.bits.AMS, lcap.bits.TO, ucap.bits.DSTRD, ucap.bits.NSSRS, ucap.bits.CSS, 
                 ucap.bits.BPS, ucap.bits.MPSMIN, ucap.bits.MPSMAX, ucap.bits.PMRS, ucap.bits.CMBS);
 
-        maxQueueEnties = lcap.bits.MQES;
+        maxQueueEntries = lcap.bits.MQES;
 
         // Controller needs to support the NVM command subset for I/O operations!
        
@@ -65,7 +65,7 @@ namespace Device::Storage {
         // Doorbell Stride is used to calculate Submission/Completion Queue Offsets
         doorbellStride = ucap.bits.DSTRD;
 
-        log.debug("Max Queue Entries supported: %d", maxQueueEnties);
+        log.debug("Max Queue Entries supported: %d", maxQueueEntries);
         log.debug("Doorbell Stride: %d", doorbellStride);
 
         /**
@@ -179,9 +179,8 @@ namespace Device::Storage {
 
     void NvmeController::initialize() {
         // Send identify Command
-        // Record max transfer size (+ other stuff?)
-        // Search + attach namespaces (aka drives)
         // Create I/O Completion + Submission queue
+        // Search + attach namespaces (aka drives)
         log.info("Initializing NVMe Controller...");
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
         uint8_t* info = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
