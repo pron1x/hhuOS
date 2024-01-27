@@ -392,8 +392,6 @@ namespace Device::Storage {
             auto* result = ioqueue->waitUntilComplete(cid);
             uint8_t statusCode = result->DW3.SF & 0xFF;
             uint8_t statusCodeType = (result->DW3.SF >> 8) & 0b111;
-            uint8_t retryDelay = (result->DW3.SF >> 11) & 0b11;
-            uint8_t more = (result->DW3.SF >> 13) & 1;
             uint8_t noRetry = (result->DW3.SF >> 14) & 1;
             log.trace("[Read] Status Code: %x, Status Code Type: %x, No Retry: %x", statusCode, statusCodeType, noRetry);
             if(statusCode != 0) {
