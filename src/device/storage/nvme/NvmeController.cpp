@@ -20,7 +20,7 @@ namespace Device::Storage {
     Kernel::Logger NvmeController::log = Kernel::Logger::get("NVME");
 
     NvmeController::NvmeController(const PciDevice &pciDevice) {
-        log.info("Initializing NVMe Controller [0x%04x:0x%04x]", pciDevice.getVendorId(), pciDevice.getDeviceId());
+        log.info("Configuring NVMe Controller [0x%04x:0x%04x]", pciDevice.getVendorId(), pciDevice.getDeviceId());
         pci = &pciDevice;
 
         //Enable Bus Master DMA and Memory Space Access
@@ -30,7 +30,7 @@ namespace Device::Storage {
 
         mapBaseAddressRegister(pciDevice);
 
-        // TODO: Introduce check for controller version? (Entry sizes could change)
+        // The driver implementation is based on NVMe Specification 1.4. Older Controller Versions might not work!
         uint32_t mjr, mnr, ter, ver;
         ver = crBaseAddress[ControllerRegister::VS/sizeof(uint32_t)];
         mjr = (ver >> 16) & 0xFFFF;
@@ -39,9 +39,8 @@ namespace Device::Storage {
 
         log.info("Controller Version: %d.%d.%d", mjr, mnr, ter);
 
-        /**
-         * Due to hhuOS being 32bit, we split the Capabilities into lower and upper part.
-        */
+        
+        // Due to hhuOS being 32bit, we split the Capabilities into lower and upper part.
 
         lControllerCapabilities lcap = {};
         uControllerCapabilities ucap = {};
@@ -49,16 +48,13 @@ namespace Device::Storage {
         ucap.uCAP = crBaseAddress[ControllerRegister::UCAP/sizeof(uint32_t)];
 
         log.debug("Capabilites: %x %x", ucap.uCAP, lcap.lCAP);
-        log.debug("MQES: %x CQR: %x AMS: %x TO: %x DSTRD: %x NSSRS: %x CSS: %x BPS: %x MPSMIN: %x MPSMAX: %x PMRS: %x CMBS: %x", 
+        log.debug("MQES: %x CQR: %x AMS: %x TO: %x DSTRD: %x NSSRS: %x\nCSS: %x BPS: %x MPSMIN: %x MPSMAX: %x PMRS: %x CMBS: %x", 
                 lcap.bits.MQES, lcap.bits.CQR, lcap.bits.AMS, lcap.bits.TO, ucap.bits.DSTRD, ucap.bits.NSSRS, ucap.bits.CSS, 
                 ucap.bits.BPS, ucap.bits.MPSMIN, ucap.bits.MPSMAX, ucap.bits.PMRS, ucap.bits.CMBS);
 
         maxQueueEnties = lcap.bits.MQES;
 
-        /**
-         * Controller needs to support NVM command subset
-         * 
-        */
+        // Controller needs to support the NVM command subset for I/O operations!
        
         uint8_t nvmCommand = (ucap.bits.CSS >> 0) & 0x1;
         uint8_t adminCommand = ((ucap.bits.CSS) >> 7) & 0x1;
@@ -66,10 +62,7 @@ namespace Device::Storage {
             log.warn("No I/O Command Set supported! [NVM: %x | Admin: %x]", nvmCommand, adminCommand);
         }
 
-        /**
-         * Doorbell Stride is used to calculate Submission/Completion Queue Offsets
-        */
-
+        // Doorbell Stride is used to calculate Submission/Completion Queue Offsets
         doorbellStride = ucap.bits.DSTRD;
 
         log.debug("Max Queue Entries supported: %d", maxQueueEnties);
@@ -120,7 +113,7 @@ namespace Device::Storage {
                     if(status.bits.SHST != SHST_COMPLETE) {
                         // Failed to shutdown controller
                         log.error("Failed to shutdown controller!");
-                        // Controller cannot be initialized, check how to exit constructor!
+                        // Controller cannot be initialized, undefined behavior!
                     }
                 }
             } //Shutdown should be completed
@@ -136,8 +129,8 @@ namespace Device::Storage {
                 Util::Async::Thread::sleep(Util::Time::Timestamp::ofMilliseconds(timeout));
                 status.csts = crBaseAddress[ControllerRegister::CSTS/sizeof(uint32_t)];
                 if(status.bits.RDY != 0) {
-                    log.warn("Failed to reset/disable the controller!");
-                    // Controller cannot be initialized, check how to exit constructor!
+                    log.error("Failed to reset/disable the controller!");
+                    // Controller cannot be initialized, undefined behavior!
                 }
             }
         } else {
@@ -189,19 +182,23 @@ namespace Device::Storage {
         // Record max transfer size (+ other stuff?)
         // Search + attach namespaces (aka drives)
         // Create I/O Completion + Submission queue
+        log.info("Initializing NVMe Controller...");
         auto &memoryService = Kernel::System::getService<Kernel::MemoryService>();
         uint8_t* info = reinterpret_cast<uint8_t*>(memoryService.mapIO(4096));
+        log.trace("Initializing Controller. Sending Identify Command.");
 
         // Identify the controller
         adminQueue.sendIdentifyCommand(memoryService.getPhysicalAddress(info), 0x01, 0);
         
+        // Check the Controller type
         uint8_t type = info[111];
         if(type != 0x1) {
             log.warn("Controller is not an I/O Controller!");
         }
         maxDataTransfer = (1 << info[77]) * minPageSize;
-        // TODO: Check why controller ID field returns 0
+        // Get the NVM Subsystem Controller Id. Might be 0.
         id = reinterpret_cast<uint16_t*>(info)[39];
+        log.trace("Creating I/O Queue.");
         
         // Create the first I/O Queue Pair
         ioqueue = adminQueue.createNewQueue(1, NVME_QUEUE_ENTRIES);
@@ -209,6 +206,7 @@ namespace Device::Storage {
         // Reuse the info memory block for namespace list
         uint32_t* nsList = reinterpret_cast<uint32_t*>(info);
 
+        log.trace("Identifying Namespacelist");
         // Identify the namespace list
         adminQueue.sendIdentifyCommand(memoryService.getPhysicalAddress(nsList), 0x02, 0);
         
@@ -228,34 +226,36 @@ namespace Device::Storage {
             uint64_t blocks = nsInfo->NSZE;
 
             // Read LBA Format and block size from LBA Format
-            // TODO: Assure that it's correct, seems to work now (FLBAS returns 0)
             uint8_t lbaSlot = nsInfo->FLBAS & 0x0F;
             log.trace("NS[%d]: lbaSlot: %x", nsList[i], lbaSlot);
 
+            // Calculate the logical block size of the namespace
             uint32_t blockSize = 1 << (((nsInfo->LBAFormat[lbaSlot]) >> 16 ) & 0xFF);
 
             namespaces.add(new Nvme::NvmeNamespace(this, nsid, blocks, blockSize));
 
             // BUG: The blocksize logs as 0, debugger confirmed that the namespace object gets initialized and returns the correct value
-            log.debug("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
+            log.trace("Namespace [%d] found. Blocks: %d, Blocksize: %d bytes", 
                     nsid, namespaces.get(i)->getSectorCount(), namespaces.get(i)->getSectorSize());
             adminQueue.attachNamespace(this->id, nsid);
-            log.debug("Attached namespace.");
+            log.debug("Attached namespace[%d].", nsid);
         }
 
         memoryService.freeUserMemory(info);
         memoryService.freeUserMemory(nsInfo);
 
+        // Register all namespaces in the StorageService
         for(auto* ns : namespaces) {
             Kernel::System::getService<Kernel::StorageService>().registerDevice(ns, "nvme");
         }
     }
 
     void NvmeController::initializeAvailableControllers() {
-        log.setLevel(log.DEBUG);
+        log.setLevel(log.TRACE);
         auto devices = Pci::search(Pci::Class::MASS_STORAGE, PCI_SUBCLASS_NVME);
         for (const auto &device : devices) {
             auto *controller = new NvmeController(device);
+            // Controller needs to receive interrupts before completing the initialization
             controller->plugin();
             controller->initialize();
         }
@@ -272,11 +272,6 @@ namespace Device::Storage {
         // Calculate required Memory for data transfer
         // This should fit into a uint32_t, otherwise buffer could not have been created
         uint32_t totalBytesToRead = ns->getSectorSize() * blockCount;
-        // If bytesToRead is exactly 1 page, we write the physical Pointer into PRP1
-        // If bytesToRead is exactly or smaller than 2 pages, we write physical Pointer of page 1 into PRP1
-        //  and pointer of page 2 into PRP2
-        // If bytesToRead is greater than 2 pages, we create a PRP List and put the PRPList pointer into PRP1
-        //  and PRP2. 
 
         // Since the blocks to read field in a command takes a 16 bit number, we need to calculate the amount of commands to send.
         uint32_t commandsToSend = (blockCount - 1) / MAX_BLOCKS_IO + 1; // Quick division and rounding up
@@ -284,20 +279,29 @@ namespace Device::Storage {
 
         uint32_t bytesLeft = totalBytesToRead;
         uint32_t cStartBlock = startBlock;
+
+        bool prpl = false;
         for(uint32_t i = 0; i < commandsToSend; i++) {
             uint8_t* data;
+            uint64_t* prpList;
             uint64_t prp1, prp2;
             // Bytes to read in this command
+            // If commandBytes is exactly 1 page, we write the physical Pointer into PRP1
+            // If commandBytes is exactly or smaller than 2 pages, we write physical Pointer of page 1 into PRP1
+            //  and pointer of page 2 into PRP2
+            // If commandBytes is greater than 2 pages, we create a PRP List and put the a pointer to the first memory page into PRP1
+            //  and PRPList pointer into PRP2 
             uint32_t commandBytes = bytesLeft >= maxBytesPerCommand ? maxBytesPerCommand : bytesLeft;
+
             // Create the PRP Entries
             if(commandBytes <= PAGE_SIZE * 2) {
                 // We do not need to create a PRP List. Fill PRP1, Fill PRP2 if two pages are required.
                 data = reinterpret_cast<uint8_t*>(memoryService.mapIO(bytesLeft));
                 prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data));
                 prp2 = bytesLeft <= PAGE_SIZE ? 0 : reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data+PAGE_SIZE));
+                prpl = false;
             } else {
                 // We need to create a PRP List and potentially account for multiple commands that need to be sent.
-                // Calculate the bytes to be read in this command
                 data = reinterpret_cast<uint8_t*>(memoryService.mapIO(commandBytes));
 
                 // Calculate amount of page pointers we're adding to the list
@@ -306,12 +310,10 @@ namespace Device::Storage {
                 // Since we need to account for prp list linking, only PAGE_SIZE/sizeof(uint64_t) - 1 data page entries fit per prp list page.
                 // (dataPages/pointersPerPage)*sizeof(uint64_t) + (datapages * sizeof(uint64_t)) bytes need to be requested. -> Calculate the pages needed to fit all datapages -> Amount of linked entries
                 // Add the raw memory needed to add all the pointers to data pages.
-                // Allocate the prp list memory
-                // TODO: Free PRP List memory!
-                uint64_t* prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO((dataPages/pointersPerPage)*sizeof(uint64_t) + dataPages * sizeof(uint64_t)));
+                prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO((dataPages/pointersPerPage)*sizeof(uint64_t) + (dataPages-1) * sizeof(uint64_t)));
                 uint32_t pageSlot = 0;
                 // Add pointers to the physical pages to the prp list
-                for(uint32_t p = 0; p < dataPages; p++) {
+                for(uint32_t p = 1; p < dataPages; p++) {
                     // If we cross a prp list memory page boundary, we need to link to the next page if more pages need to be added
                     if((pageSlot + 1) % pointersPerPage == 0 && p + 1 != dataPages) { // next slot is first of page AND not the last pointer that is added
                         // The current slot should be the last of the page, so the pageSlot + 1 should point to the beginning of the next page
@@ -324,38 +326,17 @@ namespace Device::Storage {
                         prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + (PAGE_SIZE * p)));
                     }
                 }
-                prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList));
-                prp2 = prpList[0]; // First memory page
+                prp1 = data[0]; // First Memory Page
+                prp2 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList)); // Rest of the pages
 
                 // Calculate bytesLeft for next command.
                 bytesLeft -= maxBytesPerCommand;
+                prpl = true;
             }
 
             /**
              * Read command uses DWORD10, DWORD11, DWORD12, DWORD13, DWORD14 and DWORD15.
-             * DWORD10/DWORD11:
-             *      Address of starting logical block.
-             *      DWORD10 bits 31:00
-             *      DWORD11 bits 63:32
-             * DWORD12:
-             *      15:00 Number of blocks to be read
-             *      29:26 Protection Information Field, unused in this implementation
-             *      30    Force Unit Access, unused and cleared to 0
-             *      31    Limited Retry, Cleared to 0, controller applies all available error recovery to return data
-             * DWORD13:
-             *      03:00 Access Frequency: Cleared to 0 to provide no frequency information
-             *      05:04 Access Latency: Cleared to 0 to provide no latency information
-             *      06    Sequential Request: If 1, command is part of sequential read that includes multiple reads
-             *      07    Incompressibe: Cleared to 0 to provide no compression information
-             * DWORD14:
-             *      Expected Initial Logical Block Reference Tag
-             *      No end-to-end protection support, so cleared to 0
-             * DWORD15:
-             *      Expected Logical Block Application Tag
-             *      Expected Logical Block Application Tag Mask
-             *      No end-to-end protection support, so cleared to 0
             */
-            // Fill the command
             ioqueue->lockQueue();
             uint32_t cid = ioqueue->getSubmissionSlotNumber();
             Nvme::NvmeQueue::NvmeCommand* command = ioqueue->getSubmissionEntry();
@@ -369,13 +350,42 @@ namespace Device::Storage {
             
             command->PRP1 = prp1;
             command->PRP2 = prp2;
-
+            /**
+             * DWORD10/DWORD11:
+             *      Address of starting logical block.
+             *      DWORD10 bits 31:00
+             *      DWORD11 bits 63:32
+             */
             command->CDW10 = cStartBlock;
             command->CDW11 = 0;
-
+            /**
+             * DWORD12:
+             *      15:00 Number of blocks to be read. Zero based!
+             *      29:26 Protection Information Field, unused in this implementation
+             *      30    Force Unit Access, unused and cleared to 0
+             *      31    Limited Retry, Cleared to 0, controller applies all available error recovery to return data
+             */
             command->CDW12 = (0 << 31 | 0 << 30 | 0 << 26 | ((commandBytes / ns->getSectorSize())-1));
+            /**
+             * DWORD13:
+             *      03:00 Access Frequency: Cleared to 0 to provide no frequency information
+             *      05:04 Access Latency: Cleared to 0 to provide no latency information
+             *      06    Sequential Request: If 1, command is part of sequential read that includes multiple reads
+             *      07    Incompressibe: Cleared to 0 to provide no compression information
+             */
             command->CDW13 = (0 << 7 | 0 << 6 | 0 << 4 | 0);
+            /**
+             * DWORD14:
+             *      Expected Initial Logical Block Reference Tag
+             *      No end-to-end protection support, so cleared to 0
+             */
             command->CDW14 = 0;
+            /**
+             * DWORD15:
+             *      Expected Logical Block Application Tag
+             *      Expected Logical Block Application Tag Mask
+             *      No end-to-end protection support, so cleared to 0
+            */
             command->CDW15 = 0;
 
             ioqueue->unlockQueue();
@@ -386,19 +396,19 @@ namespace Device::Storage {
             uint8_t retryDelay = (result->DW3.SF >> 11) & 0b11;
             uint8_t more = (result->DW3.SF >> 13) & 1;
             uint8_t noRetry = (result->DW3.SF >> 14) & 1;
-            log.info("Status Code: %x, Status Code Type: %x, Retry Delay: %x, More: %x, No Retry: %x", statusCode, statusCodeType, retryDelay, more, noRetry);
+            log.trace("[Read] Status Code: %x, Status Code Type: %x, No Retry: %x", statusCode, statusCodeType, noRetry);
             if(statusCode != 0) {
-                memoryService.freeUserMemory(data);
-                return 0;
+                log.warn("Read command returned Error Code %x! Requested Data most likely not returned.", statusCode);
             }
             // Copy the data from data Pointer to buffer, taking into account number of commands already sent.
-            // This can (and should?) be simpler by using the 'Address' template and .copyRange method. Otherwise simplify with uint64_t pointers
             for(uint32_t j = 0; j < commandBytes; j++) {
                 buffer[i * maxBytesPerCommand + j] = data[j];
             }
             // Free data pointer. Can't reuse due to potential size differences.
-            // Potentially possible to reuse same pointer and avoid getting/freeing mem in loop by fix-sized reads.
             memoryService.freeUserMemory(data);
+            if(prpl) {
+                memoryService.freeUserMemory(prpList);
+            }
             // Increment cStartBlock by blocks read in this command
             cStartBlock += commandBytes / ns->getSectorSize();
         }
@@ -420,6 +430,7 @@ namespace Device::Storage {
         uint32_t bytesLeft = totalBytesToWrite;
         uint32_t cStartBlock = startBlock;
         uint8_t* data = reinterpret_cast<uint8_t*>(memoryService.mapIO(totalBytesToWrite));
+        uint64_t* prpList;
         // Copy buffer to data memory to ensure page alignment
         for(uint32_t i = 0; i < totalBytesToWrite; i++) {
             data[i] = buffer[i];
@@ -427,6 +438,7 @@ namespace Device::Storage {
 
         for(uint32_t i = 0; i < commandsToSend; i++) {
             uint64_t prp1, prp2;
+            bool prpl = false;
             // Bytes to read in this command
             uint32_t commandBytes = bytesLeft >= maxBytesPerCommand ? maxBytesPerCommand : bytesLeft;
             // Create the PRP Entries
@@ -443,11 +455,11 @@ namespace Device::Storage {
                 // (dataPages/pointersPerPage)*sizeof(uint64_t) + (datapages * sizeof(uint64_t)) bytes need to be requested. -> Calculate the pages needed to fit all datapages -> Amount of linked entries
                 // Add the raw memory needed to add all the pointers to data pages.
                 // Allocate the prp list memory
-                // TODO: Free PRP List memory!
-                uint64_t* prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO((dataPages/pointersPerPage)*sizeof(uint64_t) + dataPages * sizeof(uint64_t)));
+                prpList = reinterpret_cast<uint64_t*>(memoryService.mapIO((dataPages/pointersPerPage)*sizeof(uint64_t) + (dataPages-1) * sizeof(uint64_t)));
                 uint32_t pageSlot = 0;
                 // Add pointers to the physical pages to the prp list
-                for(uint32_t p = 0; p < dataPages; p++) {
+                // PRP1 entry contains the pointer to the first data page, so we do not include the first page 
+                for(uint32_t p = 1; p < dataPages; p++) {
                     // If we cross a prp list memory page boundary, we need to link to the next page if more pages need to be added
                     if((pageSlot + 1) % pointersPerPage == 0 && p + 1 != dataPages) { // next slot is first of page AND not the last pointer that is added
                         // The current slot should be the last of the page, so the pageSlot + 1 should point to the beginning of the next page
@@ -459,8 +471,8 @@ namespace Device::Storage {
                         prpList[pageSlot++] = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(data + i * maxBytesPerCommand + (PAGE_SIZE * p)));
                     }
                 }
-                prp1 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList));
-                prp2 = prpList[0]; // First memory page
+                prp1 = data[0]; // First Memory Page
+                prp2 = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(prpList)); // Rest of the pages
 
                 // Calculate bytesLeft for next command.
                 bytesLeft -= maxBytesPerCommand;
@@ -508,6 +520,13 @@ namespace Device::Storage {
             ioqueue->unlockQueue();
             ioqueue->updateSubmissionTail();
             ioqueue->waitUntilComplete(cid);
+
+            // Free data pointer. Can't reuse due to potential size differences.
+            memoryService.freeUserMemory(data);
+            if(prpl) {
+                memoryService.freeUserMemory(prpList);
+            }
+
             cStartBlock += commandBytes / ns->getSectorSize();
         }
 
@@ -539,12 +558,14 @@ namespace Device::Storage {
 
     void NvmeController::plugin() {
         auto &interruptService = Kernel::System::getService<Kernel::InterruptService>();
+        // Assign Interrupt. System seems to assign Vector FREE3, so we use that one
         interruptService.assignInterrupt(Kernel::InterruptVector::FREE3, *this);
         interruptService.allowHardwareInterrupt(pci->getInterruptLine());
     }
 
     void NvmeController::trigger(const Kernel::InterruptFrame &frame) {
         log.trace("Received Interrupt: %x", frame.interrupt);
+        // Need to check all Completion Queues for new entries!
         for(Nvme::NvmeQueue* queue : queues) {
             queue->checkCompletionQueue();
         }
@@ -557,7 +578,7 @@ namespace Device::Storage {
         pciDevice.writeDoubleWord(Pci::BASE_ADDRESS_0, 0xFFFFFFFF);
         uint32_t size = pciDevice.readDoubleWord(Pci::BASE_ADDRESS_0) & 0xFFFFFFF0;
         pciDevice.writeDoubleWord(Pci::BASE_ADDRESS_0, bar0);
-
+        // Calculate size for memory mapped registers.
         size = ~size + 1;
 
         // Get physical address from BAR0 + BAR1;
