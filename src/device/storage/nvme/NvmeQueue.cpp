@@ -25,29 +25,31 @@ namespace Device::Storage {
         this->compQueue = reinterpret_cast<NvmeCompletionEntry*>(memoryService.mapIO(size * sizeof(NvmeCompletionEntry)));
         this->compQueuePhysicalPointer = reinterpret_cast<uint64_t>(memoryService.getPhysicalAddress(compQueue));
 
-        // Initialize Phase Bit to
+        // Initialize Phase Bit to 0
         for(uint32_t i = 0; i < size; i++) {
             compQueue[i].DW3.P = 0;
         }
 
-        log.debug("Initialized Queue %d with size %d.", id, size);
+        log.trace("Initialized Queue %d with size %d.", id, size);
     };
 
     NvmeQueue::NvmeCommand* NvmeQueue::getSubmissionEntry() {
         auto ptr = &subQueue[subQueueTail];
-        subQueueTail = (subQueueTail + 1) % size;
+        subQueueTail = (subQueueTail + 1) % size; // Take wrapping into account
         return ptr;
     }
 
     NvmeQueue::NvmeCompletionEntry* NvmeQueue::waitUntilComplete(uint32_t slot) {
+        // Busy wait until the queue is not waiting for a command completion anymore
          while (waiting) {}
          return &compQueue[slot];
     }
 
     void NvmeQueue::updateSubmissionTail() {
-        log.trace("Updating Submission Queue[%d] Tail Doorbell to %d.", id, subQueueTail);
+        lockQueue();
         waiting = true;
         nvme->setQueueTail(id, subQueueTail);
+        unlockQueue();
     }
 
     void NvmeQueue::checkCompletionQueue() {
@@ -62,7 +64,7 @@ namespace Device::Storage {
         }
         // Loop through all new entries in completion queue, indicated by phase bit
         while(compQueue[compQueueHead].DW3.P == phase) {
-            log.debug("[Queue %d] Status field for command[%d]: %x", id, compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
+            log.trace("[Queue %d] Status field for command[%d]: %x", id, compQueue[compQueueHead].DW3.CID, compQueue[compQueueHead].DW3.SF);
             if(compQueueHead + 1 == size) {
                 // Phase bit toggles every wrap around!
                 phase = (phase + 1) % 2;

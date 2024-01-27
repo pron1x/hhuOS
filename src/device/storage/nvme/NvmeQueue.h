@@ -17,15 +17,36 @@ namespace Device::Storage {
     
     namespace Nvme{
 
+    /**
+     * @brief Implementation of a Submission and Completion Queue Pair. Both Queues have the same size and id.
+     * Provides a raw interface to work with the Queue Pair.
+    */
     class NvmeQueue {
         public:
         
         explicit NvmeQueue(NvmeController* nvmeController, uint16_t id, uint32_t size);
 
+        /**
+         * @brief Returns the physical pointer to the Submission Queue Buffer
+         * @returns The Pointer to the physical memory address
+        */
         uint64_t getSubmissionPhysicalAddress() { return subQueuePhysicalPointer; };
+
+        /**
+         * @brief Returns the physical pointer to the Completion Queue Buffer
+         * @returns The Pointer to the physical memory address
+        */
         uint64_t getCompletionPhysicalAddress() { return compQueuePhysicalPointer; };
+
+        /**
+         * @brief This function should be called before getting a new NvmeCommand.
+         * @returns The slot number of the NvmeCommand that will next be returned
+        */
         uint32_t getSubmissionSlotNumber() { return subQueueTail; }
 
+        /**
+         * @brief Interrupt Handler for the completion Queue. Checks the Completion Queue for new entries and updates the corresponding Queue Head Doorbell.
+        */
         void checkCompletionQueue();
         
         void lockQueue() { lock.acquire(); }
@@ -68,10 +89,23 @@ namespace Device::Storage {
             } DW3;                  // Command information
         };
 
+        /**
+         * @brief Returns the Pointer to the next NvmeCommand in the Submission Queue.
+         * @returns A Pointer to the NvmeCommand to be submitted.
+        */
         NvmeCommand* getSubmissionEntry();
 
+        /** 
+         * @brief Busy waits until the Completion Queue Entry in the slot contains the result
+         * @param slot The Queue slot to await an answer from (Command ID)
+         * @return A Pointer to the Completion Queue Entry in the slot
+        */
         NvmeCompletionEntry* waitUntilComplete(uint32_t slot);
 
+        /**
+         * @brief Writes the new Submission Tail Pointer to the Controller Doorbell Register to submit the Commands.
+         * This method should be called after each NvmeCommand creation to ensure that no pending commands are overwritten.
+        */
         void updateSubmissionTail();
 
         private:
@@ -83,10 +117,12 @@ namespace Device::Storage {
         // Submission and completion queue size
         uint32_t size;
 
+        // Tail Pointer of the Submission Queue
         uint32_t subQueueTail;
         NvmeCommand* subQueue;
         uint64_t subQueuePhysicalPointer;
 
+        // Head Pointer of the Completion Queue
         uint32_t compQueueHead;
         NvmeCompletionEntry* compQueue;
         uint64_t compQueuePhysicalPointer;
